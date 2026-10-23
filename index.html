@@ -142,6 +142,7 @@
                     <thead>
                         <tr class="bg-gray-100 text-gray-700 border-b">
                             <th class="p-2">#</th>
+                            <th class="p-2">Fecha / Hora</th>
                             <th class="p-2">Emp.</th>
                             <th class="p-2">Destino</th>
                             <th class="p-2">Cartón</th>
@@ -152,7 +153,7 @@
                     </thead>
                     <tbody id="tableBodyRecords" class="divide-y divide-gray-100">
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td>
+                            <td colspan="8" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td>
                         </tr>
                     </tbody>
                 </table>
@@ -457,8 +458,13 @@
                 return;
             }
 
+            // Generar fecha y hora actual formateada
+            const ahora = new Date();
+            const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
             const nuevoRegistro = {
                 id: Date.now(),
+                fechaHora: fechaHoraStr,
                 empleado,
                 destino: destino || 'N/A',
                 carton,
@@ -494,7 +500,7 @@
             document.getElementById('badgeCount').textContent = `${registros.length} registros`;
 
             if (registros.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
                 return;
             }
 
@@ -509,6 +515,7 @@
                 tr.className = 'hover:bg-gray-50 border-b';
                 tr.innerHTML = `
                     <td class="p-2 font-medium">${idx + 1}</td>
+                    <td class="p-2 text-gray-500 whitespace-nowrap">${r.fechaHora || 'N/A'}</td>
                     <td class="p-2">${r.empleado}</td>
                     <td class="p-2">${r.destino}</td>
                     <td class="p-2 font-mono text-emerald-700 font-bold">${r.carton}</td>
@@ -527,11 +534,11 @@
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
 
-            let csv = "ID\tEmpleado\tDestino\tCarton\tTotal_Arts\tArticulos\tTipo_Discrepancia\tDetalle_Discrepancias\n";
-            registros.pop ? registros.forEach((r, idx) => {
+            let csv = "ID\tFecha_Hora\tEmpleado\tDestino\tCarton\tTotal_Arts\tArticulos\tTipo_Discrepancia\tDetalle_Discrepancias\n";
+            registros.forEach((r, idx) => {
                 let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo} Cajas:${d.cajas} Pzs:${d.piezas}`).join('; ');
-                csv += `${idx + 1}\t${r.empleado}\t${r.destino}\t${r.carton}\t${r.articulos.length}\t"${r.articulos.join(', ')}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
-            }) : null;
+                csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t${r.destino}\t${r.carton}\t${r.articulos.length}\t"${r.articulos.join(', ')}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
+            });
 
             textarea.value = csv;
             modal.classList.remove('hidden');
