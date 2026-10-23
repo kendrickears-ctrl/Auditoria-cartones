@@ -214,6 +214,7 @@
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
         let mediaStream = null;
+        let scanInterval = null;
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -341,7 +342,7 @@
             }
         }
 
-        // Camera
+        // Camera & Barcode Detection
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -367,7 +368,8 @@
                 video.onloadedmetadata = () => {
                     video.play();
                     loading.classList.add('hidden');
-                    statusText.textContent = "Apunta al código de barras.";
+                    statusText.textContent = "Apunta la cámara hacia el código de barras...";
+                    startBarcodeDetection(video);
                 };
             } catch (err) {
                 loading.classList.add('hidden');
@@ -375,7 +377,38 @@
             }
         }
 
+        function startBarcodeDetection(video) {
+            if (!('BarcodeDetector' in window)) {
+                document.getElementById('cameraStatusText').textContent = "Escaneo automático no compatible en este navegador. Use la entrada manual abajo.";
+                return;
+            }
+
+            const barcodeDetector = new BarcodeDetector({ 
+                formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'upc_a', 'upc_e', 'code_39', 'code_93', 'itf'] 
+            });
+
+            scanInterval = setInterval(async () => {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    try {
+                        const barcodes = await barcodeDetector.detect(video);
+                        if (barcodes.length > 0) {
+                            const code = barcodes[0].rawValue;
+                            closeCameraScanner();
+                            handleScannedValue(code);
+                            if (navigator.vibrate) navigator.vibrate(100);
+                        }
+                    } catch (e) {
+                        console.error('Error detectando código:', e);
+                    }
+                }
+            }, 300);
+        }
+
         function closeCameraScanner() {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
             document.getElementById('cameraModal').classList.add('hidden');
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
@@ -495,10 +528,10 @@
             const textarea = document.getElementById('exportTextarea');
 
             let csv = "ID\tEmpleado\tDestino\tCarton\tTotal_Arts\tArticulos\tTipo_Discrepancia\tDetalle_Discrepancias\n";
-            registros.forEach((r, idx) => {
+            registros.pop ? registros.forEach((r, idx) => {
                 let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo} Cajas:${d.cajas} Pzs:${d.piezas}`).join('; ');
                 csv += `${idx + 1}\t${r.empleado}\t${r.destino}\t${r.carton}\t${r.articulos.length}\t"${r.articulos.join(', ')}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
-            });
+            }) : null;
 
             textarea.value = csv;
             modal.classList.remove('hidden');
