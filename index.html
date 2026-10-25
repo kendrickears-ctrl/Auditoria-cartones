@@ -404,7 +404,6 @@
                                 stopAutoScan();
                                 handleScannedValue(scannedValue);
                                 closeCameraScanner();
-                                // Vibración de éxito opcional si el dispositivo lo soporta
                                 if (navigator.vibrate) navigator.vibrate(100);
                             }
                         }
@@ -412,7 +411,7 @@
                         console.error('Error en escaneo automático:', err);
                     }
                 }
-            }, 300); // Revisa cada 300 milisegundos
+            }, 300);
         }
 
         function stopAutoScan() {
@@ -469,6 +468,10 @@
             }
             if (!carton) {
                 Swal.fire('Atención', 'Ingrese o escanee el código de cartón.', 'warning');
+                return;
+            }
+            if (listaArticulos.length === 0) {
+                Swal.fire('Atención', 'Debe registrar al menos un artículo escaneado.', 'warning');
                 return;
             }
 
@@ -537,18 +540,50 @@
             });
         }
 
-        // Exportación
+        // ==========================================
+        // EXPORTACIÓN CON FILAS EXPANDIDAS (CANTIDAD 1)
+        // ==========================================
+        function generarFilasExpandidasParaExportacion() {
+            let filasPlanas = [];
+            
+            // Encabezados con 'Cantidad' unitaria
+            const headers = ['ID', 'Empleado', 'Destino', 'Carton', 'Articulos', 'Cantidad', 'Tipo_Discrepancia', 'Detalle_Discrepancias'];
+            filasPlanas.push(headers);
+
+            registros.forEach((r, idx) => {
+                let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo || 'S/C'} Cajas:${d.cajas || 0} Pzs:${d.piezas || 0}`).join('; ');
+                
+                r.articulos.forEach(art => {
+                    filasPlanas.push([
+                        idx + 1,
+                        r.empleado,
+                        r.destino,
+                        `\t${r.carton}`, // Prefijo tabulado para asegurar que Excel lo lea como texto sin notación científica
+                        art,              // Cada artículo en su propia fila
+                        1,                // Cantidad unitaria fija en 1
+                        r.tipoDiscrepancia,
+                        detalle
+                    ]);
+                });
+            });
+
+            return filasPlanas;
+        }
+
         function exportToExcelModal() {
+            if (registros.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar', 'info');
+                return;
+            }
+
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
 
-            let csv = "ID\tEmpleado\tDestino\tCarton\tTotal_Arts\tArticulos\tTipo_Discrepancia\tDetalle_Discrepancias\n";
-            registros.forEach((r, idx) => {
-                let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo} Cajas:${d.cajas} Pzs:${d.piezas}`).join('; ');
-                csv += `${idx + 1}\t${r.empleado}\t${r.destino}\t${r.carton}\t${r.articulos.length}\t"${r.articulos.join(', ')}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
-            });
+            const filas = generarFilasExpandidasParaExportacion();
+            // Formato tabulado perfecto para copiar y pegar directo en Excel
+            const csvContent = filas.map(e => e.join("\t")).join("\n");
 
-            textarea.value = csv;
+            textarea.value = csvContent;
             modal.classList.remove('hidden');
         }
 
@@ -560,11 +595,12 @@
             const textarea = document.getElementById('exportTextarea');
             textarea.select();
             document.execCommand('copy');
-            Swal.fire({ icon: 'success', title: '¡Copiado!', timer: 1200, showConfirmButton: false });
+            Swal.fire({ icon: 'success', title: '¡Copiado!', text: 'Datos copiados. Ya puedes pegarlos en Excel.', timer: 1500, showConfirmButton: false });
         }
 
         function downloadCSVFile() {
-            const text = document.getElementById('exportTextarea').value;
+            const filas = generarFilasExpandidasParaExportacion();
+            const text = filas.map(e => e.map(val => `"${String(val).replace(/^\t/, '')}"`).join(",")).join("\n");
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
