@@ -554,7 +554,7 @@
         }
 
         // ==========================================
-        // EXPORTACIÓN CON FILAS EXPANDIDAS (FORMATO EXCEL ESPAÑOL)
+        // EXPORTACIÓN CON FILAS EXPANDIDAS (DATOS URI MÓVIL)
         // ==========================================
         function generarFilasExpandidasParaExportacion(esCSV = false) {
             let filasPlanas = [];
@@ -565,7 +565,6 @@
                 let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo || 'S/C'} Cajas:${d.cajas || 0} Pzs:${d.piezas || 0}`).join('; ');
                 
                 r.articulos.forEach(art => {
-                    // Si es CSV para Excel en español usamos punto y coma, si es para copiar usamos tabulador
                     let cartonVal = esCSV ? `"${r.carton}"` : `\t${r.carton}`;
                     
                     filasPlanas.push([
@@ -613,12 +612,13 @@
 
         function downloadCSVFile() {
             const filas = generarFilasExpandidasParaExportacion(true);
-            // CSV configurado con punto y coma (;) para compatibilidad total con Excel en español
             const text = filas.map(e => e.join(";")).join("\n");
-            const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
+            
+            // Usar Data URI en lugar de Blob para asegurar que Android reconozca el archivo con nombre y extensión .csv
+            const dataUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(text);
+            
             const a = document.createElement('a');
-            a.href = url;
+            a.href = dataUri;
             a.download = `Auditoria_Cartones_${new Date().toISOString().slice(0,10)}.csv`;
             document.body.appendChild(a);
             a.click();
