@@ -216,6 +216,8 @@
         let mediaStream = null;
         let scanInterval = null;
         let barcodeDetector = null;
+        let lastScannedCode = null;
+        let lastScanTime = 0;
 
         window.onload = async function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -224,7 +226,6 @@
             }
             renderTable();
 
-            // Inicializar BarcodeDetector si el navegador lo soporta
             if ('BarcodeDetector' in window) {
                 try {
                     barcodeDetector = new BarcodeDetector({ 
@@ -241,7 +242,6 @@
             renderTable();
         }
 
-        // Empleado management
         function addEmployeePrompt() {
             Swal.fire({
                 title: 'Nuevo Empleado',
@@ -267,7 +267,6 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
-        // Artículos manejo
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -294,7 +293,6 @@
             document.getElementById('textareaArticulos').value = listaArticulos.join(', ');
         }
 
-        // --- GESTIÓN CONTINUA DE DISCREPANCIAS MULTI-CÓDIGO ---
         function toggleDiscrepanciaPanel() {
             const tipo = document.getElementById('selectTipoDiscrepancia').value;
             const container = document.getElementById('discrepancyContainer');
@@ -354,7 +352,6 @@
             }
         }
 
-        // Camera & Auto-Scanner
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -380,7 +377,7 @@
                 video.onloadedmetadata = () => {
                     video.play();
                     loading.classList.add('hidden');
-                    statusText.textContent = "Apunta al código de barras para escanear...";
+                    statusText.textContent = target === 'articulos_burst' ? "Modo Ráfaga Activo: Escanea varios productos seguidos..." : "Apunta al código de barras...";
                     startAutoScan(video);
                 };
             } catch (err) {
@@ -401,10 +398,26 @@
                         if (codes.length > 0) {
                             const scannedValue = codes[0].rawValue;
                             if (scannedValue) {
-                                stopAutoScan();
+                                const now = Date.now();
+                                // Evitar lecturas duplicadas continuas en menos de 1 segundo para ráfaga
+                                if (scannedValue === lastScannedCode && (now - lastScanTime < 1000)) {
+                                    return;
+                                }
+                                lastScannedCode = scannedValue;
+                                lastScanTime = now;
+
                                 handleScannedValue(scannedValue);
-                                closeCameraScanner();
+
                                 if (navigator.vibrate) navigator.vibrate(100);
+
+                                // Si es ráfaga, NO cerramos la cámara; el usuario sigue escaneando
+                                if (activeCameraTarget !== 'articulos_burst') {
+                                    stopAutoScan();
+                                    closeCameraScanner();
+                                } else {
+                                    const statusText = document.getElementById('cameraStatusText');
+                                    statusText.innerHTML = `<span class="text-emerald-300 font-bold">¡Registrado: ${scannedValue}! Sigue escaneando...</span>`;
+                                }
                             }
                         }
                     } catch (err) {
@@ -429,6 +442,7 @@
                 mediaStream = null;
             }
             document.getElementById('cameraVideo').srcObject = null;
+            lastScannedCode = null;
         }
 
         function submitManualCameraFallback() {
@@ -436,7 +450,9 @@
             if (val) {
                 handleScannedValue(val);
                 document.getElementById('manualCameraFallback').value = '';
-                closeCameraScanner();
+                if (activeCameraTarget !== 'articulos_burst') {
+                    closeCameraScanner();
+                }
             }
         }
 
@@ -455,7 +471,6 @@
             }
         }
 
-        // Guardar Registro
         function guardarRegistro() {
             const empleado = document.getElementById('selectEmpleado').value;
             const destino = document.getElementById('inputDestino').value.trim();
@@ -546,21 +561,22 @@
         function generarFilasExpandidasParaExportacion() {
             let filasPlanas = [];
             
-            // Encabezados con 'Cantidad' unitaria
+            // Encabezados limpios con cantidad unitaria
             const headers = ['ID', 'Empleado', 'Destino', 'Carton', 'Articulos', 'Cantidad', 'Tipo_Discrepancia', 'Detalle_Discrepancias'];
             filasPlanas.push(headers);
 
             registros.forEach((r, idx) => {
                 let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo || 'S/C'} Cajas:${d.cajas || 0} Pzs:${d.piezas || 0}`).join('; ');
                 
+                // Desglosa cada artículo en su propia fila con cantidad 1
                 r.articulos.forEach(art => {
                     filasPlanas.push([
                         idx + 1,
                         r.empleado,
                         r.destino,
-                        `\t${r.carton}`, // Prefijo tabulado para asegurar que Excel lo lea como texto sin notación científica
-                        art,              // Cada artículo en su propia fila
-                        1,                // Cantidad unitaria fija en 1
+                        `\t${r.carton}`, // Protege el cartón largo para que Excel no lo altere
+                        art,              // Artículo individual
+                        1,                // Cantidad unitaria
                         r.tipoDiscrepancia,
                         detalle
                     ]);
@@ -580,7 +596,6 @@
             const textarea = document.getElementById('exportTextarea');
 
             const filas = generarFilasExpandidasParaExportacion();
-            // Formato tabulado perfecto para copiar y pegar directo en Excel
             const csvContent = filas.map(e => e.join("\t")).join("\n");
 
             textarea.value = csvContent;
