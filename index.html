@@ -142,7 +142,6 @@
                     <thead>
                         <tr class="bg-gray-100 text-gray-700 border-b">
                             <th class="p-2">#</th>
-                            <th class="p-2">Fecha / Hora</th>
                             <th class="p-2">Emp.</th>
                             <th class="p-2">Destino</th>
                             <th class="p-2">Cartón</th>
@@ -153,7 +152,7 @@
                     </thead>
                     <tbody id="tableBodyRecords" class="divide-y divide-gray-100">
                         <tr>
-                            <td colspan="8" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td>
+                            <td colspan="7" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td>
                         </tr>
                     </tbody>
                 </table>
@@ -215,7 +214,6 @@
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
         let mediaStream = null;
-        let scanInterval = null;
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -343,7 +341,7 @@
             }
         }
 
-        // Camera & Barcode Detection
+        // Camera
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -362,214 +360,4 @@
 
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: { ideal: "environment" } },
-                    audio: false
-                });
-
-                video.srcObject = mediaStream;
-                video.onloadedmetadata = () => {
-                    video.play();
-                    loading.classList.add('hidden');
-                    statusText.textContent = "Apunta la cámara hacia el código de barras...";
-                    startBarcodeDetection(video);
-                };
-            } catch (err) {
-                loading.classList.add('hidden');
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">Error al abrir cámara. Utilice la captura manual.</span>`;
-            }
-        }
-
-        function startBarcodeDetection(video) {
-            if (!('BarcodeDetector' in window)) {
-                document.getElementById('cameraStatusText').textContent = "Escaneo automático no compatible en este navegador. Use la entrada manual abajo.";
-                return;
-            }
-
-            const barcodeDetector = new BarcodeDetector({ 
-                formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'upc_a', 'upc_e', 'code_39', 'code_93', 'itf'] 
-            });
-
-            scanInterval = setInterval(async () => {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    try {
-                        const barcodes = await barcodeDetector.detect(video);
-                        if (barcodes.length > 0) {
-                            const code = barcodes[0].rawValue;
-                            closeCameraScanner();
-                            handleScannedValue(code);
-                            if (navigator.vibrate) navigator.vibrate(100);
-                        }
-                    } catch (e) {
-                        console.error('Error detectando código:', e);
-                    }
-                }
-            }, 300);
-        }
-
-        function closeCameraScanner() {
-            if (scanInterval) {
-                clearInterval(scanInterval);
-                scanInterval = null;
-            }
-            document.getElementById('cameraModal').classList.add('hidden');
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
-            }
-            document.getElementById('cameraVideo').srcObject = null;
-        }
-
-        function submitManualCameraFallback() {
-            const val = document.getElementById('manualCameraFallback').value.trim();
-            if (val) {
-                handleScannedValue(val);
-                document.getElementById('manualCameraFallback').value = '';
-                closeCameraScanner();
-            }
-        }
-
-        function handleScannedValue(code) {
-            if (activeCameraTarget === 'carton') {
-                document.getElementById('inputCarton').value = code;
-            } else if (activeCameraTarget === 'articulos_burst') {
-                listaArticulos.push(code);
-                updateArticulosView();
-            } else if (activeCameraTarget && activeCameraTarget.startsWith('disc_')) {
-                const idx = parseInt(activeCameraTarget.split('_')[1]);
-                if (discrepancyRowsData[idx]) {
-                    discrepancyRowsData[idx].codigo = code;
-                    renderDiscrepancyRows();
-                }
-            }
-        }
-
-        // Guardar Registro
-        function guardarRegistro() {
-            const empleado = document.getElementById('selectEmpleado').value;
-            const destino = document.getElementById('inputDestino').value.trim();
-            const carton = document.getElementById('inputCarton').value.trim();
-            const tipoDiscrepancia = document.getElementById('selectTipoDiscrepancia').value;
-
-            if (!empleado) {
-                Swal.fire('Atención', 'Seleccione un número de empleado.', 'warning');
-                return;
-            }
-            if (!carton) {
-                Swal.fire('Atención', 'Ingrese o escanee el código de cartón.', 'warning');
-                return;
-            }
-
-            // Generar fecha y hora actual formateada
-            const ahora = new Date();
-            const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-            const nuevoRegistro = {
-                id: Date.now(),
-                fechaHora: fechaHoraStr,
-                empleado,
-                destino: destino || 'N/A',
-                carton,
-                articulos: [...listaArticulos],
-                tipoDiscrepancia,
-                discrepanciasDetalle: tipoDiscrepancia !== 'Sin discrepancia' ? JSON.parse(JSON.stringify(discrepancyRowsData)) : []
-            };
-
-            registros.push(nuevoRegistro);
-            saveToStorage();
-            resetForm();
-
-            Swal.fire({ icon: 'success', title: '¡Guardado!', timer: 1200, showConfirmButton: false });
-        }
-
-        function resetForm() {
-            document.getElementById('inputDestino').value = '';
-            document.getElementById('inputCarton').value = '';
-            listaArticulos = [];
-            discrepancyRowsData = [];
-            updateArticulosView();
-            document.getElementById('selectTipoDiscrepancia').value = 'Sin discrepancia';
-            toggleDiscrepanciaPanel();
-        }
-
-        function deleteRecord(id) {
-            registros = registros.filter(r => r.id !== id);
-            saveToStorage();
-        }
-
-        function renderTable() {
-            const tbody = document.getElementById('tableBodyRecords');
-            document.getElementById('badgeCount').textContent = `${registros.length} registros`;
-
-            if (registros.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = '';
-            registros.forEach((r, idx) => {
-                let discText = r.tipoDiscrepancia;
-                if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
-                    discText += ': ' + r.discrepanciasDetalle.map(d => `[${d.tipo}: ${d.codigo || 'S/C'}, Cajas: ${d.cajas || 0}, Pzs: ${d.piezas || 0}]`).join(' | ');
-                }
-
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-gray-50 border-b';
-                tr.innerHTML = `
-                    <td class="p-2 font-medium">${idx + 1}</td>
-                    <td class="p-2 text-gray-500 whitespace-nowrap">${r.fechaHora || 'N/A'}</td>
-                    <td class="p-2">${r.empleado}</td>
-                    <td class="p-2">${r.destino}</td>
-                    <td class="p-2 font-mono text-emerald-700 font-bold">${r.carton}</td>
-                    <td class="p-2">${r.articulos.length} arts</td>
-                    <td class="p-2 text-gray-600 max-w-xs truncate" title="${discText}">${discText}</td>
-                    <td class="p-2 text-center">
-                        <button onclick="deleteRecord(${r.id})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        // Exportación
-        function exportToExcelModal() {
-            const modal = document.getElementById('exportModal');
-            const textarea = document.getElementById('exportTextarea');
-
-            let csv = "ID\tFecha_Hora\tEmpleado\tDestino\tCarton\tTotal_Arts\tArticulos\tTipo_Discrepancia\tDetalle_Discrepancias\n";
-            registros.forEach((r, idx) => {
-                let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo} Cajas:${d.cajas} Pzs:${d.piezas}`).join('; ');
-                csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t${r.destino}\t${r.carton}\t${r.articulos.length}\t"${r.articulos.join(', ')}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
-            });
-
-            textarea.value = csv;
-            modal.classList.remove('hidden');
-        }
-
-        function closeExportModal() {
-            document.getElementById('exportModal').classList.add('hidden');
-        }
-
-        function copyExportText() {
-            const textarea = document.getElementById('exportTextarea');
-            textarea.select();
-            document.execCommand('copy');
-            Swal.fire({ icon: 'success', title: '¡Copiado!', timer: 1200, showConfirmButton: false });
-        }
-
-        function downloadCSVFile() {
-            const text = document.getElementById('exportTextarea').value;
-            const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Auditoria_Cartones_${new Date().toISOString().slice(0,10)}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        }
-
-        function copyTableToClipboard() {
-            exportToExcelModal();
-        }
-    </script>
-</body>
-</html>
+                  
