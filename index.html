@@ -399,7 +399,6 @@
                             const scannedValue = codes[0].rawValue;
                             if (scannedValue) {
                                 const now = Date.now();
-                                // Evitar lecturas duplicadas continuas en menos de 1 segundo para ráfaga
                                 if (scannedValue === lastScannedCode && (now - lastScanTime < 1000)) {
                                     return;
                                 }
@@ -410,7 +409,6 @@
 
                                 if (navigator.vibrate) navigator.vibrate(100);
 
-                                // Si es ráfaga, NO cerramos la cámara; el usuario sigue escaneando
                                 if (activeCameraTarget !== 'articulos_burst') {
                                     stopAutoScan();
                                     closeCameraScanner();
@@ -556,27 +554,27 @@
         }
 
         // ==========================================
-        // EXPORTACIÓN CON FILAS EXPANDIDAS (CANTIDAD 1)
+        // EXPORTACIÓN CON FILAS EXPANDIDAS (FORMATO EXCEL ESPAÑOL)
         // ==========================================
-        function generarFilasExpandidasParaExportacion() {
+        function generarFilasExpandidasParaExportacion(esCSV = false) {
             let filasPlanas = [];
-            
-            // Encabezados limpios con cantidad unitaria
             const headers = ['ID', 'Empleado', 'Destino', 'Carton', 'Articulos', 'Cantidad', 'Tipo_Discrepancia', 'Detalle_Discrepancias'];
             filasPlanas.push(headers);
 
             registros.forEach((r, idx) => {
                 let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo || 'S/C'} Cajas:${d.cajas || 0} Pzs:${d.piezas || 0}`).join('; ');
                 
-                // Desglosa cada artículo en su propia fila con cantidad 1
                 r.articulos.forEach(art => {
+                    // Si es CSV para Excel en español usamos punto y coma, si es para copiar usamos tabulador
+                    let cartonVal = esCSV ? `"${r.carton}"` : `\t${r.carton}`;
+                    
                     filasPlanas.push([
                         idx + 1,
                         r.empleado,
                         r.destino,
-                        `\t${r.carton}`, // Protege el cartón largo para que Excel no lo altere
-                        art,              // Artículo individual
-                        1,                // Cantidad unitaria
+                        cartonVal,
+                        art,
+                        1,
                         r.tipoDiscrepancia,
                         detalle
                     ]);
@@ -595,7 +593,7 @@
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
 
-            const filas = generarFilasExpandidasParaExportacion();
+            const filas = generarFilasExpandidasParaExportacion(false);
             const csvContent = filas.map(e => e.join("\t")).join("\n");
 
             textarea.value = csvContent;
@@ -614,8 +612,9 @@
         }
 
         function downloadCSVFile() {
-            const filas = generarFilasExpandidasParaExportacion();
-            const text = filas.map(e => e.map(val => `"${String(val).replace(/^\t/, '')}"`).join(",")).join("\n");
+            const filas = generarFilasExpandidasParaExportacion(true);
+            // CSV configurado con punto y coma (;) para compatibilidad total con Excel en español
+            const text = filas.map(e => e.join(";")).join("\n");
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
