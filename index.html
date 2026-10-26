@@ -48,8 +48,8 @@
                     <label class="block text-xs font-bold text-gray-600 uppercase mb-1 flex justify-between">
                         <span>1. Empleado</span>
                         <span class="space-x-2">
-                            <button onclick="clearEmployeeList()" class="text-red-500 font-normal hover:underline text-[10px]">Vaciar</button>
-                            <button onclick="addEmployeePrompt()" class="text-emerald-600 font-normal hover:underline text-[10px]">+ Otro</button>
+                            <button type="button" onclick="clearEmployeeList()" class="text-red-500 font-normal hover:underline text-[10px]">Vaciar</button>
+                            <button type="button" onclick="addEmployeePrompt()" class="text-emerald-600 font-normal hover:underline text-[10px]">+ Otro</button>
                         </span>
                     </label>
                     <select id="selectEmpleado" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none">
@@ -69,7 +69,7 @@
                 <label class="block text-xs font-bold text-gray-600 uppercase mb-1">3. Código de Cartón</label>
                 <div class="flex space-x-2">
                     <input type="text" id="inputCarton" placeholder="Escribe o escanea el cartón" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <button onclick="openCameraScanner('carton')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 rounded-lg shadow flex items-center justify-center transition">
+                    <button type="button" onclick="openCameraScanner('carton')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 rounded-lg shadow flex items-center justify-center transition">
                         <i class="fa-solid fa-camera text-lg"></i>
                     </button>
                 </div>
@@ -79,16 +79,15 @@
             <div>
                 <label class="block text-xs font-bold text-gray-600 uppercase mb-1 flex justify-between">
                     <span>4. Artículos Registrados (<span id="artCount">0</span>)</span>
-                    <button onclick="clearArticulos()" class="text-red-500 text-[11px] hover:underline">Limpiar lista</button>
+                    <button type="button" onclick="clearArticulos()" class="text-red-500 text-[11px] hover:underline">Limpiar lista</button>
                 </label>
                 <div class="flex space-x-2 mb-2">
                     <input type="text" id="inputArticuloUnico" placeholder="Escanear o escribir artículo + Enter" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" onkeypress="handleArticuloKeypress(event)">
-                    <button onclick="addArticuloManual()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium shadow">Agregar</button>
-                    <button onclick="openCameraScanner('articulo')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium shadow flex items-center space-x-1">
+                    <button type="button" onclick="addArticuloManual()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium shadow">Agregar</button>
+                    <button type="button" onclick="openCameraScanner('articulo')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium shadow flex items-center space-x-1">
                         <i class="fa-solid fa-camera"></i><span>Escanear Artículo</span>
                     </button>
                 </div>
-                <!-- Contenedor visual de artículos registrados con sus cajas y discrepancias -->
                 <div id="containerArticulosDetalle" class="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50 text-xs">
                     <p class="text-center text-gray-400 py-2">No hay artículos agregados todavía</p>
                 </div>
@@ -96,7 +95,7 @@
 
             <!-- Botones de Acción Global -->
             <div class="flex space-x-3 pt-2">
-                <button onclick="guardarRegistro()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md flex items-center justify-center space-x-2 transition">
+                <button type="button" onclick="guardarRegistro()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md flex items-center justify-center space-x-2 transition">
                     <i class="fa-solid fa-floppy-disk"></i><span>Guardar Registro</span>
                 </button>
             </div>
@@ -109,7 +108,7 @@
                     <i class="fa-solid fa-table text-emerald-600 mr-2"></i> Registros Capturados
                 </h3>
                 <div class="space-x-2">
-                    <button onclick="copyTableToClipboard()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg shadow">
+                    <button type="button" onclick="copyTableToClipboard()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg shadow">
                         <i class="fa-solid fa-copy mr-1"></i> Copiar Todo
                     </button>
                 </div>
@@ -143,7 +142,7 @@
     <div id="cameraModal" class="fixed inset-0 bg-black/80 z-50 hidden flex flex-col justify-between p-4">
         <div class="flex justify-between items-center text-white">
             <h3 id="cameraModalTitle" class="font-bold text-base">Escaneando código...</h3>
-            <button onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
+            <button type="button" onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
                 <i class="fa-solid fa-xmark mr-1"></i> Cerrar
             </button>
         </div>
@@ -160,8 +159,8 @@
         <div class="max-w-md mx-auto w-full text-center space-y-2">
             <p id="cameraStatusText" class="text-xs text-gray-300">Apunta la cámara al código de barras...</p>
             <div class="flex space-x-2">
-                <input type="text" id="manualCameraFallback" placeholder="Ingresar código manualmente si es necesario..." class="flex-1 p-2 text-xs rounded-lg border border-gray-300 text-gray-800">
-                <button onclick="submitManualCameraFallback()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold">Usar</button>
+                <input type="text" id="manualCameraFallback" placeholder="Ingresar código manualmente..." class="flex-1 p-2 text-xs rounded-lg border border-gray-300 text-gray-800">
+                <button type="button" onclick="submitManualCameraFallback()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold">Usar</button>
             </div>
         </div>
     </div>
@@ -171,14 +170,14 @@
         <div class="bg-white rounded-xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
             <h3 class="font-bold text-gray-800 text-base border-b pb-2 flex justify-between items-center">
                 <span>Exportar Datos (Excel / CSV)</span>
-                <button onclick="closeExportModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" onclick="closeExportModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
             </h3>
             <textarea id="exportTextarea" rows="6" readonly class="w-full border rounded-lg p-2 text-xs bg-gray-50 font-mono"></textarea>
             <div class="flex space-x-2">
-                <button onclick="copyExportText()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold shadow">
+                <button type="button" onclick="copyExportText()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold shadow">
                     <i class="fa-solid fa-copy mr-1"></i> Copiar al Portapapeles
                 </button>
-                <button onclick="downloadCSVFile()" class="bg-slate-700 hover:bg-slate-800 text-white py-2 px-4 rounded-lg text-xs font-bold shadow">
+                <button type="button" onclick="downloadCSVFile()" class="bg-slate-700 hover:bg-slate-800 text-white py-2 px-4 rounded-lg text-xs font-bold shadow">
                     Descargar .CSV
                 </button>
             </div>
@@ -188,7 +187,7 @@
     <!-- JavaScript Logic -->
     <script>
         let registros = [];
-        let listaArticulos = []; // Almacena objetos: { codigo, cajasFisicas, discrepancias: [] }
+        let listaArticulos = [];
         let activeCameraTarget = null;
         let mediaStream = null;
         let scanInterval = null;
@@ -219,7 +218,6 @@
             renderTable();
         }
 
-        // Empleado management
         function addEmployeePrompt() {
             Swal.fire({
                 title: 'Nuevo Empleado',
@@ -245,7 +243,6 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
-        // --- FLUJO DE ARTÍCULOS Y CAJAS FÍSICAS ---
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -266,7 +263,6 @@
             updateArticulosView();
         }
 
-        // Prompt interactivo para capturar cajas físicas y discrepancias específicas del artículo
         async function procesarArticuloEscaneado(codigo) {
             const { value: formValues } = await Swal.fire({
                 title: `Artículo: ${codigo}`,
@@ -274,11 +270,11 @@
                     <div class="text-left space-y-3 text-sm">
                         <div>
                             <label class="block font-semibold text-gray-700 mb-1">Cantidad de Cajas Físicas:</label>
-                            <input id="swalCajas" type="number" min="1" value="1" class="w-full border rounded-lg p-2 text-sm">
+                            <input id="swalCajas" type="number" min="1" value="1" class="w-full border rounded-lg p-2 text-sm bg-white text-gray-900">
                         </div>
                         <div>
                             <label class="block font-semibold text-gray-700 mb-1">Tipo de Discrepancia:</label>
-                            <select id="swalTipoDisc" class="w-full border rounded-lg p-2 text-sm">
+                            <select id="swalTipoDisc" class="w-full border rounded-lg p-2 text-sm bg-white text-gray-900">
                                 <option value="Ninguna">Sin discrepancia</option>
                                 <option value="Faltante">Faltante</option>
                                 <option value="Sobrante">Sobrante</option>
@@ -288,11 +284,11 @@
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="block font-semibold text-gray-700 mb-1">Cajas Disc.:</label>
-                                <input id="swalDiscCajas" type="number" min="0" value="0" class="w-full border rounded-lg p-2 text-sm">
+                                <input id="swalDiscCajas" type="number" min="0" value="0" class="w-full border rounded-lg p-2 text-sm bg-white text-gray-900">
                             </div>
                             <div>
                                 <label class="block font-semibold text-gray-700 mb-1">Piezas Disc.:</label>
-                                <input id="swalDiscPiezas" type="number" min="0" value="0" class="w-full border rounded-lg p-2 text-sm">
+                                <input id="swalDiscPiezas" type="number" min="0" value="0" class="w-full border rounded-lg p-2 text-sm bg-white text-gray-900">
                             </div>
                         </div>
                     </div>
@@ -354,13 +350,12 @@
                         <span class="font-bold text-emerald-700">${idx + 1}. SKU: ${art.codigo}</span>
                         <div class="text-gray-600">Cajas físicas: <strong class="text-gray-800">${art.cajasFisicas}</strong> | Disc: <span class="text-amber-600">${discText}</span></div>
                     </div>
-                    <button onclick="eliminarArticuloCaptura(${idx})" class="text-red-500 hover:text-red-700 px-2 py-1"><i class="fa-solid fa-trash"></i></button>
+                    <button type="button" onclick="eliminarArticuloCaptura(${idx})" class="text-red-500 hover:text-red-700 px-2 py-1"><i class="fa-solid fa-trash"></i></button>
                 `;
                 container.appendChild(div);
             });
         }
 
-        // Camera & Auto-Scanner (Artículo escaneado único y detención automática)
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -373,4 +368,279 @@
             statusText.textContent = "Iniciando cámara...";
 
             try {
-                if (!navigator.mediaDevices || !navigator.mediaDevi
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error("Su navegador no permite el acceso directo a la cámara.");
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } },
+                    audio: false
+                });
+
+                video.srcObject = mediaStream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    loading.classList.add('hidden');
+                    statusText.textContent = target === 'articulo' ? "Apunta al artículo. Se detendrá al detectar el código..." : "Apunta al código de barras...";
+                    startAutoScan(video);
+                };
+            } catch (err) {
+                loading.classList.add('hidden');
+                statusText.innerHTML = `<span class="text-red-400 font-semibold">Error al abrir cámara. Utilice la captura manual abajo.</span>`;
+            }
+        }
+
+        function startAutoScan(video) {
+            if (!barcodeDetector) return;
+            
+            if (scanInterval) clearInterval(scanInterval);
+
+            scanInterval = setInterval(async () => {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    try {
+                        const codes = await barcodeDetector.detect(video);
+                        if (codes.length > 0) {
+                            const scannedValue = codes[0].rawValue;
+                            if (scannedValue) {
+                                const now = Date.now();
+                                if (scannedValue === lastScannedCode && (now - lastScanTime < 1000)) {
+                                    return;
+                                }
+                                lastScannedCode = scannedValue;
+                                lastScanTime = now;
+
+                                if (navigator.vibrate) navigator.vibrate(100);
+
+                                stopAutoScan();
+                                closeCameraScanner();
+
+                                handleScannedValue(scannedValue);
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error en escaneo automático:', err);
+                    }
+                }
+            }, 300);
+        }
+
+        function stopAutoScan() {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+        }
+
+        function closeCameraScanner() {
+            stopAutoScan();
+            document.getElementById('cameraModal').classList.add('hidden');
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            document.getElementById('cameraVideo').srcObject = null;
+            lastScannedCode = null;
+        }
+
+        function submitManualCameraFallback() {
+            const val = document.getElementById('manualCameraFallback').value.trim();
+            if (val) {
+                document.getElementById('manualCameraFallback').value = '';
+                closeCameraScanner();
+                handleScannedValue(val);
+            }
+        }
+
+        function handleScannedValue(code) {
+            if (activeCameraTarget === 'carton') {
+                document.getElementById('inputCarton').value = code;
+            } else if (activeCameraTarget === 'articulo') {
+                procesarArticuloEscaneado(code);
+            }
+        }
+
+        function guardarRegistro() {
+            const empleado = document.getElementById('selectEmpleado').value;
+            const destino = document.getElementById('inputDestino').value.trim();
+            const carton = document.getElementById('inputCarton').value.trim();
+
+            if (!empleado) {
+                Swal.fire('Atención', 'Seleccione un número de empleado.', 'warning');
+                return;
+            }
+            if (!carton) {
+                Swal.fire('Atención', 'Ingrese o escanee el código de cartón.', 'warning');
+                return;
+            }
+            if (listaArticulos.length === 0) {
+                Swal.fire('Atención', 'Debe registrar al menos un artículo escaneado con sus cajas físicas.', 'warning');
+                return;
+            }
+
+            const ahora = new Date();
+            const fecha = ahora.toLocaleDateString();
+            const hora = ahora.toLocaleTimeString();
+
+            const nuevoRegistro = {
+                id: Date.now(),
+                fecha,
+                hora,
+                empleado,
+                destino: destino || 'N/A',
+                carton,
+                articulos: JSON.parse(JSON.stringify(listaArticulos))
+            };
+
+            registros.push(nuevoRegistro);
+            saveToStorage();
+            resetForm();
+
+            Swal.fire({ icon: 'success', title: '¡Guardado!', timer: 1200, showConfirmButton: false });
+        }
+
+        function resetForm() {
+            document.getElementById('inputDestino').value = '';
+            document.getElementById('inputCarton').value = '';
+            listaArticulos = [];
+            updateArticulosView();
+        }
+
+        function deleteRecord(id) {
+            registros = registros.filter(r => r.id !== id);
+            saveToStorage();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBodyRecords');
+            document.getElementById('badgeCount').textContent = `${registros.length} registros`;
+
+            if (registros.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = '';
+            registros.forEach((r, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-50 border-b';
+                tr.innerHTML = `
+                    <td class="p-2 font-medium">${idx + 1}</td>
+                    <td class="p-2">${r.fecha || 'N/A'} ${r.hora || ''}</td>
+                    <td class="p-2">${r.empleado}</td>
+                    <td class="p-2">${r.destino}</td>
+                    <td class="p-2 font-mono text-emerald-700 font-bold">${r.carton}</td>
+                    <td class="p-2">${r.articulos.length} arts</td>
+                    <td class="p-2 text-center">
+                        <button type="button" onclick="deleteRecord(${r.id})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function generarFilasExpandidasParaExportacion(esCSV = false) {
+            let filasPlanas = [];
+            const headers = [
+                'Fecha de auditoría', 
+                'Hora de auditoría', 
+                'Empleado', 
+                'Destino', 
+                'Código de cartón', 
+                'Código de artículo', 
+                'Cantidad de cajas físicas', 
+                'Sobrante', 
+                'Faltante', 
+                'Merma', 
+                'Código de discrepancia', 
+                'Cajas de discrepancia', 
+                'Piezas de discrepancia'
+            ];
+            filasPlanas.push(headers);
+
+            registros.forEach((r) => {
+                r.articulos.forEach(art => {
+                    let cartonVal = esCSV ? `"${r.carton}"` : `\t${r.carton}`;
+                    
+                    if (!art.discrepancias || art.discrepancias.length === 0) {
+                        filasPlanas.push([
+                            r.fecha || '',
+                            r.hora || '',
+                            r.empleado,
+                            r.destino,
+                            cartonVal,
+                            art.codigo,
+                            art.cajasFisicas,
+                            '', '', '', '', '', ''
+                        ]);
+                    } else {
+                        art.discrepancias.forEach(d => {
+                            filasPlanas.push([
+                                r.fecha || '',
+                                r.hora || '',
+                                r.empleado,
+                                r.destino,
+                                cartonVal,
+                                art.codigo,
+                                art.cajasFisicas,
+                                d.tipo === 'Sobrante' ? d.cajas : '',
+                                d.tipo === 'Faltante' ? d.cajas : '',
+                                d.tipo === 'Merma' ? d.cajas : '',
+                                d.codigoDiscrepancia || art.codigo,
+                                d.cajas || 0,
+                                d.piezas || 0
+                            ]);
+                        });
+                    }
+                });
+            });
+
+            return filasPlanas;
+        }
+
+        function exportToExcelModal() {
+            if (registros.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar', 'info');
+                return;
+            }
+
+            const modal = document.getElementById('exportModal');
+            const textarea = document.getElementById('exportTextarea');
+
+            const filas = generarFilasExpandidasParaExportacion(false);
+            const csvContent = filas.map(e => e.join("\t")).join("\n");
+
+            textarea.value = csvContent;
+            modal.classList.remove('hidden');
+        }
+
+        function closeExportModal() {
+            document.getElementById('exportModal').classList.add('hidden');
+        }
+
+        function copyExportText() {
+            const textarea = document.getElementById('exportTextarea');
+            textarea.select();
+            document.execCommand('copy');
+            Swal.fire({ icon: 'success', title: '¡Copiado!', text: 'Datos copiados. Ya puedes pegarlos en Excel.', timer: 1500, showConfirmButton: false });
+        }
+
+        function downloadCSVFile() {
+            const filas = generarFilasExpandidasParaExportacion(true);
+            const text = filas.map(e => e.join(";")).join("\n");
+            
+            const dataUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(text);
+            
+            const a = document.createElement('a');
+            a.href = dataUri;
+            a.download = `Auditoria_Cartones_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function copyTableToClipboard() {
+            exportToExcelModal();
+        }
+    </script>
+</body>
+</html>
