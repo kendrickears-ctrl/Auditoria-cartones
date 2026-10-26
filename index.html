@@ -75,44 +75,22 @@
                 </div>
             </div>
 
-            <!-- 4. Artículos Escaneados -->
+            <!-- 4. Artículos Escaneados con Cajas Físicas -->
             <div>
                 <label class="block text-xs font-bold text-gray-600 uppercase mb-1 flex justify-between">
-                    <span>4. Artículos Escaneados (<span id="artCount">0</span>)</span>
+                    <span>4. Artículos Registrados (<span id="artCount">0</span>)</span>
                     <button onclick="clearArticulos()" class="text-red-500 text-[11px] hover:underline">Limpiar lista</button>
                 </label>
                 <div class="flex space-x-2 mb-2">
-                    <input type="text" id="inputArticuloUnico" placeholder="Escanear con pistola láser aquí + Enter" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" onkeypress="handleArticuloKeypress(event)">
+                    <input type="text" id="inputArticuloUnico" placeholder="Escanear o escribir artículo + Enter" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" onkeypress="handleArticuloKeypress(event)">
                     <button onclick="addArticuloManual()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium shadow">Agregar</button>
-                    <button onclick="openCameraScanner('articulos_burst')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium shadow flex items-center space-x-1">
-                        <i class="fa-solid fa-camera-rotate"></i><span>Ráfaga</span>
+                    <button onclick="openCameraScanner('articulo')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium shadow flex items-center space-x-1">
+                        <i class="fa-solid fa-camera"></i><span>Escanear Artículo</span>
                     </button>
                 </div>
-                <textarea id="textareaArticulos" rows="2" readonly placeholder="Los códigos escaneados aparecerán aquí..." class="w-full border border-gray-200 rounded-lg p-2 text-xs bg-gray-100 text-gray-600 resize-none"></textarea>
-            </div>
-
-            <!-- 5. Discrepancias General -->
-            <div class="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 space-y-3">
-                <label class="block text-xs font-bold text-emerald-800 uppercase">5. Gestión de Discrepancias</label>
-                <select id="selectTipoDiscrepancia" onchange="toggleDiscrepanciaPanel()" class="w-full border border-emerald-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <option value="Sin discrepancia">Sin discrepancia</option>
-                    <option value="Faltante">Faltante</option>
-                    <option value="Sobrante">Sobrante</option>
-                    <option value="Merma">Merma</option>
-                    <option value="Faltante y Sobrante">Faltante y Sobrante</option>
-                </select>
-
-                <!-- Dynamic Discrepancy Container -->
-                <div id="discrepancyContainer" class="hidden space-y-3 pt-2">
-                    <div class="flex justify-between items-center">
-                        <span class="text-xs font-semibold text-emerald-900">Listado de Errores / Discrepancias</span>
-                        <button onclick="addDiscrepancyRow()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md shadow font-bold flex items-center space-x-1">
-                            <i class="fa-solid fa-plus"></i><span>Agregar Otro Código</span>
-                        </button>
-                    </div>
-                    <div id="discrepancyRowsList" class="space-y-2">
-                        <!-- Dynamic rows injected here -->
-                    </div>
+                <!-- Contenedor visual de artículos registrados con sus cajas y discrepancias -->
+                <div id="containerArticulosDetalle" class="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50 text-xs">
+                    <p class="text-center text-gray-400 py-2">No hay artículos agregados todavía</p>
                 </div>
             </div>
 
@@ -142,11 +120,11 @@
                     <thead>
                         <tr class="bg-gray-100 text-gray-700 border-b">
                             <th class="p-2">#</th>
+                            <th class="p-2">Fecha/Hora</th>
                             <th class="p-2">Emp.</th>
                             <th class="p-2">Destino</th>
                             <th class="p-2">Cartón</th>
                             <th class="p-2">Arts.</th>
-                            <th class="p-2">Discrepancias Detalle</th>
                             <th class="p-2 text-center">Acción</th>
                         </tr>
                     </thead>
@@ -210,8 +188,7 @@
     <!-- JavaScript Logic -->
     <script>
         let registros = [];
-        let listaArticulos = [];
-        let discrepancyRowsData = [];
+        let listaArticulos = []; // Almacena objetos: { codigo, cajasFisicas, discrepancias: [] }
         let activeCameraTarget = null;
         let mediaStream = null;
         let scanInterval = null;
@@ -242,6 +219,7 @@
             renderTable();
         }
 
+        // Empleado management
         function addEmployeePrompt() {
             Swal.fire({
                 title: 'Nuevo Empleado',
@@ -267,6 +245,7 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
+        // --- FLUJO DE ARTÍCULOS Y CAJAS FÍSICAS ---
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -277,9 +256,8 @@
         function addArticuloManual() {
             const val = document.getElementById('inputArticuloUnico').value.trim();
             if (val) {
-                listaArticulos.push(val);
                 document.getElementById('inputArticuloUnico').value = '';
-                updateArticulosView();
+                procesarArticuloEscaneado(val);
             }
         }
 
@@ -288,70 +266,101 @@
             updateArticulosView();
         }
 
-        function updateArticulosView() {
-            document.getElementById('artCount').textContent = listaArticulos.length;
-            document.getElementById('textareaArticulos').value = listaArticulos.join(', ');
-        }
-
-        function toggleDiscrepanciaPanel() {
-            const tipo = document.getElementById('selectTipoDiscrepancia').value;
-            const container = document.getElementById('discrepancyContainer');
-            if (tipo === 'Sin discrepancia') {
-                container.classList.add('hidden');
-                discrepancyRowsData = [];
-                renderDiscrepancyRows();
-            } else {
-                container.classList.remove('hidden');
-                if (discrepancyRowsData.length === 0) {
-                    addDiscrepancyRow();
-                } else {
-                    renderDiscrepancyRows();
+        // Prompt interactivo para capturar cajas físicas y discrepancias específicas del artículo
+        async function procesarArticuloEscaneado(codigo) {
+            const { value: formValues } = await Swal.fire({
+                title: `Artículo: ${codigo}`,
+                html: `
+                    <div class="text-left space-y-3 text-sm">
+                        <div>
+                            <label class="block font-semibold text-gray-700 mb-1">Cantidad de Cajas Físicas:</label>
+                            <input id="swalCajas" type="number" min="1" value="1" class="w-full border rounded-lg p-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-gray-700 mb-1">Tipo de Discrepancia:</label>
+                            <select id="swalTipoDisc" class="w-full border rounded-lg p-2 text-sm">
+                                <option value="Ninguna">Sin discrepancia</option>
+                                <option value="Faltante">Faltante</option>
+                                <option value="Sobrante">Sobrante</option>
+                                <option value="Merma">Merma</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block font-semibold text-gray-700 mb-1">Cajas Disc.:</label>
+                                <input id="swalDiscCajas" type="number" min="0" value="0" class="w-full border rounded-lg p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-gray-700 mb-1">Piezas Disc.:</label>
+                                <input id="swalDiscPiezas" type="number" min="0" value="0" class="w-full border rounded-lg p-2 text-sm">
+                            </div>
+                        </div>
+                    </div>
+                `,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Confirmar Artículo',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const cajasFisicas = parseInt(document.getElementById('swalCajas').value) || 1;
+                    const tipoDisc = document.getElementById('swalTipoDisc').value;
+                    const discCajas = parseInt(document.getElementById('swalDiscCajas').value) || 0;
+                    const discPiezas = parseInt(document.getElementById('swalDiscPiezas').value) || 0;
+                    
+                    let discrepancias = [];
+                    if (tipoDisc !== 'Ninguna') {
+                        discrepancias.push({
+                            tipo: tipoDisc,
+                            codigoDiscrepancia: codigo,
+                            cajas: discCajas,
+                            piezas: discPiezas
+                        });
+                    }
+                    return { codigo, cajasFisicas, discrepancias };
                 }
+            });
+
+            if (formValues) {
+                listaArticulos.push(formValues);
+                updateArticulosView();
             }
         }
 
-        function addDiscrepancyRow() {
-            const defaultType = document.getElementById('selectTipoDiscrepancia').value;
-            const tipoFila = (defaultType === 'Sin discrepancia' || defaultType === 'Faltante y Sobrante') ? 'Faltante' : defaultType;
-            discrepancyRowsData.push({ tipo: tipoFila, codigo: '', cajas: '', piezas: '' });
-            renderDiscrepancyRows();
+        function eliminarArticuloCaptura(index) {
+            listaArticulos.splice(index, 1);
+            updateArticulosView();
         }
 
-        function removeDiscrepancyRow(index) {
-            discrepancyRowsData.splice(index, 1);
-            renderDiscrepancyRows();
-        }
+        function updateArticulosView() {
+            document.getElementById('artCount').textContent = listaArticulos.length;
+            const container = document.getElementById('containerArticulosDetalle');
+            
+            if (listaArticulos.length === 0) {
+                container.innerHTML = `<p class="text-center text-gray-400 py-2">No hay artículos agregados todavía</p>`;
+                return;
+            }
 
-        function renderDiscrepancyRows() {
-            const list = document.getElementById('discrepancyRowsList');
-            list.innerHTML = '';
+            container.innerHTML = '';
+            listaArticulos.forEach((art, idx) => {
+                let discText = 'Sin discrepancia';
+                if (art.discrepancias && art.discrepancias.length > 0) {
+                    discText = art.discrepancias.map(d => `${d.tipo} (Cajas: ${d.cajas}, Pzs: ${d.piezas})`).join(' | ');
+                }
 
-            discrepancyRowsData.forEach((item, index) => {
-                const row = document.createElement('div');
-                row.className = 'flex flex-wrap md:flex-nowrap items-center gap-2 bg-white p-2.5 rounded-lg border border-emerald-200 shadow-sm';
-                
-                row.innerHTML = `
-                    <select onchange="updateDiscField(${index}, 'tipo', this.value)" class="border rounded p-1.5 text-xs bg-gray-50 outline-none font-semibold text-emerald-800">
-                        <option value="Faltante" ${item.tipo === 'Faltante' ? 'selected' : ''}>Faltante</option>
-                        <option value="Sobrante" ${item.tipo === 'Sobrante' ? 'selected' : ''}>Sobrante</option>
-                        <option value="Merma" ${item.tipo === 'Merma' ? 'selected' : ''}>Merma</option>
-                    </select>
-                    <input type="text" placeholder="SKU / Código" value="${item.codigo || ''}" oninput="updateDiscField(${index}, 'codigo', this.value)" class="flex-1 min-w-[120px] border rounded p-1.5 text-xs outline-none">
-                    <button onclick="openCameraScanner('disc_${index}')" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs"><i class="fa-solid fa-camera"></i></button>
-                    <input type="number" placeholder="Cajas" value="${item.cajas || ''}" oninput="updateDiscField(${index}, 'cajas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
-                    <input type="number" placeholder="Piezas" value="${item.piezas || ''}" oninput="updateDiscField(${index}, 'piezas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
-                    <button onclick="removeDiscrepancyRow(${index})" class="text-red-500 hover:text-red-700 px-1 text-sm"><i class="fa-solid fa-trash-can"></i></button>
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-white p-2 rounded border shadow-sm';
+                div.innerHTML = `
+                    <div>
+                        <span class="font-bold text-emerald-700">${idx + 1}. SKU: ${art.codigo}</span>
+                        <div class="text-gray-600">Cajas físicas: <strong class="text-gray-800">${art.cajasFisicas}</strong> | Disc: <span class="text-amber-600">${discText}</span></div>
+                    </div>
+                    <button onclick="eliminarArticuloCaptura(${idx})" class="text-red-500 hover:text-red-700 px-2 py-1"><i class="fa-solid fa-trash"></i></button>
                 `;
-                list.appendChild(row);
+                container.appendChild(div);
             });
         }
 
-        function updateDiscField(index, field, value) {
-            if (discrepancyRowsData[index]) {
-                discrepancyRowsData[index][field] = value;
-            }
-        }
-
+        // Camera & Auto-Scanner (Artículo escaneado único y detención automática)
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -364,270 +373,4 @@
             statusText.textContent = "Iniciando cámara...";
 
             try {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("Su navegador no permite el acceso directo a la cámara.");
-                }
-
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: "environment" } },
-                    audio: false
-                });
-
-                video.srcObject = mediaStream;
-                video.onloadedmetadata = () => {
-                    video.play();
-                    loading.classList.add('hidden');
-                    statusText.textContent = target === 'articulos_burst' ? "Modo Ráfaga Activo: Escanea varios productos seguidos..." : "Apunta al código de barras...";
-                    startAutoScan(video);
-                };
-            } catch (err) {
-                loading.classList.add('hidden');
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">Error al abrir cámara. Utilice la captura manual abajo.</span>`;
-            }
-        }
-
-        function startAutoScan(video) {
-            if (!barcodeDetector) return;
-            
-            if (scanInterval) clearInterval(scanInterval);
-
-            scanInterval = setInterval(async () => {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    try {
-                        const codes = await barcodeDetector.detect(video);
-                        if (codes.length > 0) {
-                            const scannedValue = codes[0].rawValue;
-                            if (scannedValue) {
-                                const now = Date.now();
-                                if (scannedValue === lastScannedCode && (now - lastScanTime < 1000)) {
-                                    return;
-                                }
-                                lastScannedCode = scannedValue;
-                                lastScanTime = now;
-
-                                handleScannedValue(scannedValue);
-
-                                if (navigator.vibrate) navigator.vibrate(100);
-
-                                if (activeCameraTarget !== 'articulos_burst') {
-                                    stopAutoScan();
-                                    closeCameraScanner();
-                                } else {
-                                    const statusText = document.getElementById('cameraStatusText');
-                                    statusText.innerHTML = `<span class="text-emerald-300 font-bold">¡Registrado: ${scannedValue}! Sigue escaneando...</span>`;
-                                }
-                            }
-                        }
-                    } catch (err) {
-                        console.error('Error en escaneo automático:', err);
-                    }
-                }
-            }, 300);
-        }
-
-        function stopAutoScan() {
-            if (scanInterval) {
-                clearInterval(scanInterval);
-                scanInterval = null;
-            }
-        }
-
-        function closeCameraScanner() {
-            stopAutoScan();
-            document.getElementById('cameraModal').classList.add('hidden');
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
-            }
-            document.getElementById('cameraVideo').srcObject = null;
-            lastScannedCode = null;
-        }
-
-        function submitManualCameraFallback() {
-            const val = document.getElementById('manualCameraFallback').value.trim();
-            if (val) {
-                handleScannedValue(val);
-                document.getElementById('manualCameraFallback').value = '';
-                if (activeCameraTarget !== 'articulos_burst') {
-                    closeCameraScanner();
-                }
-            }
-        }
-
-        function handleScannedValue(code) {
-            if (activeCameraTarget === 'carton') {
-                document.getElementById('inputCarton').value = code;
-            } else if (activeCameraTarget === 'articulos_burst') {
-                listaArticulos.push(code);
-                updateArticulosView();
-            } else if (activeCameraTarget && activeCameraTarget.startsWith('disc_')) {
-                const idx = parseInt(activeCameraTarget.split('_')[1]);
-                if (discrepancyRowsData[idx]) {
-                    discrepancyRowsData[idx].codigo = code;
-                    renderDiscrepancyRows();
-                }
-            }
-        }
-
-        function guardarRegistro() {
-            const empleado = document.getElementById('selectEmpleado').value;
-            const destino = document.getElementById('inputDestino').value.trim();
-            const carton = document.getElementById('inputCarton').value.trim();
-            const tipoDiscrepancia = document.getElementById('selectTipoDiscrepancia').value;
-
-            if (!empleado) {
-                Swal.fire('Atención', 'Seleccione un número de empleado.', 'warning');
-                return;
-            }
-            if (!carton) {
-                Swal.fire('Atención', 'Ingrese o escanee el código de cartón.', 'warning');
-                return;
-            }
-            if (listaArticulos.length === 0) {
-                Swal.fire('Atención', 'Debe registrar al menos un artículo escaneado.', 'warning');
-                return;
-            }
-
-            const nuevoRegistro = {
-                id: Date.now(),
-                empleado,
-                destino: destino || 'N/A',
-                carton,
-                articulos: [...listaArticulos],
-                tipoDiscrepancia,
-                discrepanciasDetalle: tipoDiscrepancia !== 'Sin discrepancia' ? JSON.parse(JSON.stringify(discrepancyRowsData)) : []
-            };
-
-            registros.push(nuevoRegistro);
-            saveToStorage();
-            resetForm();
-
-            Swal.fire({ icon: 'success', title: '¡Guardado!', timer: 1200, showConfirmButton: false });
-        }
-
-        function resetForm() {
-            document.getElementById('inputDestino').value = '';
-            document.getElementById('inputCarton').value = '';
-            listaArticulos = [];
-            discrepancyRowsData = [];
-            updateArticulosView();
-            document.getElementById('selectTipoDiscrepancia').value = 'Sin discrepancia';
-            toggleDiscrepanciaPanel();
-        }
-
-        function deleteRecord(id) {
-            registros = registros.filter(r => r.id !== id);
-            saveToStorage();
-        }
-
-        function renderTable() {
-            const tbody = document.getElementById('tableBodyRecords');
-            document.getElementById('badgeCount').textContent = `${registros.length} registros`;
-
-            if (registros.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = '';
-            registros.forEach((r, idx) => {
-                let discText = r.tipoDiscrepancia;
-                if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
-                    discText += ': ' + r.discrepanciasDetalle.map(d => `[${d.tipo}: ${d.codigo || 'S/C'}, Cajas: ${d.cajas || 0}, Pzs: ${d.piezas || 0}]`).join(' | ');
-                }
-
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-gray-50 border-b';
-                tr.innerHTML = `
-                    <td class="p-2 font-medium">${idx + 1}</td>
-                    <td class="p-2">${r.empleado}</td>
-                    <td class="p-2">${r.destino}</td>
-                    <td class="p-2 font-mono text-emerald-700 font-bold">${r.carton}</td>
-                    <td class="p-2">${r.articulos.length} arts</td>
-                    <td class="p-2 text-gray-600 max-w-xs truncate" title="${discText}">${discText}</td>
-                    <td class="p-2 text-center">
-                        <button onclick="deleteRecord(${r.id})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        // ==========================================
-        // EXPORTACIÓN CON FILAS EXPANDIDAS (DATOS URI MÓVIL)
-        // ==========================================
-        function generarFilasExpandidasParaExportacion(esCSV = false) {
-            let filasPlanas = [];
-            const headers = ['ID', 'Empleado', 'Destino', 'Carton', 'Articulos', 'Cantidad', 'Tipo_Discrepancia', 'Detalle_Discrepancias'];
-            filasPlanas.push(headers);
-
-            registros.forEach((r, idx) => {
-                let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo || 'S/C'} Cajas:${d.cajas || 0} Pzs:${d.piezas || 0}`).join('; ');
-                
-                r.articulos.forEach(art => {
-                    let cartonVal = esCSV ? `"${r.carton}"` : `\t${r.carton}`;
-                    
-                    filasPlanas.push([
-                        idx + 1,
-                        r.empleado,
-                        r.destino,
-                        cartonVal,
-                        art,
-                        1,
-                        r.tipoDiscrepancia,
-                        detalle
-                    ]);
-                });
-            });
-
-            return filasPlanas;
-        }
-
-        function exportToExcelModal() {
-            if (registros.length === 0) {
-                Swal.fire('Atención', 'No hay registros para exportar', 'info');
-                return;
-            }
-
-            const modal = document.getElementById('exportModal');
-            const textarea = document.getElementById('exportTextarea');
-
-            const filas = generarFilasExpandidasParaExportacion(false);
-            const csvContent = filas.map(e => e.join("\t")).join("\n");
-
-            textarea.value = csvContent;
-            modal.classList.remove('hidden');
-        }
-
-        function closeExportModal() {
-            document.getElementById('exportModal').classList.add('hidden');
-        }
-
-        function copyExportText() {
-            const textarea = document.getElementById('exportTextarea');
-            textarea.select();
-            document.execCommand('copy');
-            Swal.fire({ icon: 'success', title: '¡Copiado!', text: 'Datos copiados. Ya puedes pegarlos en Excel.', timer: 1500, showConfirmButton: false });
-        }
-
-        function downloadCSVFile() {
-            const filas = generarFilasExpandidasParaExportacion(true);
-            const text = filas.map(e => e.join(";")).join("\n");
-            
-            // Usar Data URI en lugar de Blob para asegurar que Android reconozca el archivo con nombre y extensión .csv
-            const dataUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(text);
-            
-            const a = document.createElement('a');
-            a.href = dataUri;
-            a.download = `Auditoria_Cartones_${new Date().toISOString().slice(0,10)}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        }
-
-        function copyTableToClipboard() {
-            exportToExcelModal();
-        }
-    </script>
-</body>
-</html>
+                if (!navigator.mediaDevices || !navigator.mediaDevi
