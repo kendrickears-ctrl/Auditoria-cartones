@@ -186,20 +186,25 @@
     <div id="cameraModal" class="fixed inset-0 bg-black/80 z-50 hidden flex flex-col justify-between p-4">
         <div class="flex justify-between items-center text-white">
             <h3 id="cameraModalTitle" class="font-bold text-base">Escaneando código...</h3>
-            <button onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
-                <i class="fa-solid fa-xmark mr-1"></i> Cerrar
-            </button>
+            <div class="space-x-2">
+                <button onclick="reiniciarCamaraScanner()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold" title="Reiniciar si se congela">
+                    <i class="fa-solid fa-rotate-right mr-1"></i> Reiniciar
+                </button>
+                <button onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
+                    <i class="fa-solid fa-xmark mr-1"></i> Cerrar
+                </button>
+            </div>
         </div>
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
-            <!-- Canvas oculto para procesamiento de fotogramas de alta velocidad -->
+            <!-- Canvas oculto para procesamiento de fotogramas optimizado -->
             <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
-                <p class="text-sm">Iniciando cámara...</p>
+                <p class="text-sm">Iniciando cámara y enfoque...</p>
             </div>
-            <div class="absolute inset-12 border-2 border-dashed border-emerald-400/60 rounded-lg pointer-events-none"></div>
+            <div class="absolute inset-16 border-2 border-dashed border-emerald-400/60 rounded-lg pointer-events-none"></div>
         </div>
 
         <div class="max-w-md mx-auto w-full text-center space-y-2">
@@ -302,14 +307,14 @@
                 title: 'Cantidad de Cajas Físicas',
                 html: `<p class="text-sm text-gray-600 mb-2">Artículo detectado:</p>
                        <p class="font-mono font-bold text-emerald-700 text-lg mb-3">${codigoArticulo}</p>
-                       <p class="text-xs text-gray-500 mb-1">Escribe la cantidad de cajas físicas (campo vacío)</p>`,
+                       <p class="text-xs text-gray-500 mb-1">Escribe la cantidad de cajas físicas</p>`,
                 input: 'number',
                 inputAttributes: {
                     min: 1,
                     step: 1,
                     placeholder: 'Escribe cantidad de cajas...'
                 },
-                inputValue: '', // Asegura que inicie completamente vacío sin heredar valores previos
+                inputValue: '',
                 showCancelButton: true,
                 confirmButtonText: 'Confirmar',
                 cancelButtonText: 'Cancelar',
@@ -324,11 +329,6 @@
                     const cantidadCajas = parseInt(result.value);
                     listaArticulosDetalle.push({ codigo: codigoArticulo, cajas: cantidadCajas });
                     updateArticulosView();
-
-                    // Si estaba activo el modo ráfaga, reanudamos el escaneo si el modal sigue abierto
-                    if (activeCameraTarget === 'articulos_burst' && !document.getElementById('cameraModal').classList.contains('hidden')) {
-                        // El intervalo de escaneo sigue corriendo en segundo plano o se reanuda
-                    }
                 }
             });
         }
@@ -425,7 +425,7 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO CONTINUO ÓPTIMO (GETUSERMEDIA + MultiFormatReader + decodeWithState) ---
+        // --- MOTOR DE ESCANEO OPTIMIZADO PARA ENFOQUE Y VELOCIDAD EN IPHONE Y ANDROID ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -435,7 +435,7 @@
 
             modal.classList.remove('hidden');
             loading.classList.remove('hidden');
-            statusText.textContent = "Iniciando cámara trasera...";
+            statusText.textContent = "Iniciando cámara y optimizando enfoque...";
 
             await closeCameraScannerAsync();
 
@@ -444,14 +444,24 @@
                     throw new Error("getUserMedia no soportado en este navegador.");
                 }
 
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { 
+                const constraints = {
+                    video: {
                         facingMode: { ideal: "environment" },
                         width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        height: { ideal: 720 },
+                        advanced: [{ focusMode: "continuous" }]
                     },
                     audio: false
-                });
+                };
+
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (constraintErr) {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { ideal: "environment" } },
+                        audio: false
+                    });
+                }
 
                 videoElement.srcObject = mediaStream;
                 await videoElement.play().catch(e => console.log("Play warning:", e));
@@ -459,7 +469,7 @@
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                startCanvasDecodingLoop(videoElement);
+                startOptimizedCanvasDecodingLoop(videoElement);
 
             } catch (err) {
                 loading.classList.add('hidden');
@@ -478,7 +488,17 @@
             }
         }
 
-        function startCanvasDecodingLoop(videoElement) {
+        async function reiniciarCamaraScanner() {
+            const targetActual = activeCameraTarget;
+            await closeCameraScannerAsync();
+            setTimeout(() => {
+                if (targetActual) {
+                    openCameraScanner(targetActual);
+                }
+            }, 300);
+        }
+
+        function startOptimizedCanvasDecodingLoop(videoElement) {
             const canvas = document.getElementById('hiddenCanvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             
@@ -520,12 +540,25 @@
                     }
 
                     try {
-                        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                        const cropWidth = Math.floor(canvas.width * 0.85);
+                        const cropHeight = Math.floor(canvas.height * 0.85);
+                        const startX = Math.floor((canvas.width - cropWidth) / 2);
+                        const startY = Math.floor((canvas.height - cropHeight) / 2);
+
+                        ctx.drawImage(videoElement, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
                         
+                        const tempCanvasW = canvas.width;
+                        const tempCanvasH = canvas.height;
+                        canvas.width = cropWidth;
+                        canvas.height = cropHeight;
+
                         const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
                         const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
                         
                         const result = multiFormatReader.decodeWithState(binaryBitmap);
+
+                        canvas.width = tempCanvasW;
+                        canvas.height = tempCanvasH;
 
                         if (result) {
                             const codeText = result.getText();
@@ -543,7 +576,6 @@
                                 navigator.vibrate(100);
                             }
 
-                            // Si es objetivo ráfaga de artículos, cerramos la cámara temporalmente para pedir cajas o manejamos el flujo
                             if (activeCameraTarget === 'articulos_burst') {
                                 closeCameraScanner();
                                 solicitarCantidadCajasParaArticulo(codeText);
@@ -560,7 +592,7 @@
                         }
                     }
                 }
-            }, 150);
+            }, 120);
         }
 
         async function closeCameraScannerAsync() {
@@ -629,7 +661,6 @@
             }
 
             if (editingRecordId !== null) {
-                // Actualizar registro existente conservando id y fechaHora originales
                 const index = registros.findIndex(r => r.id === editingRecordId);
                 if (index !== -1) {
                     registros[index].empleado = empleado;
@@ -643,7 +674,6 @@
                 Swal.fire({ icon: 'success', title: '¡Actualizado!', timer: 1200, showConfirmButton: false });
                 cancelarEdicion();
             } else {
-                // Crear nuevo registro
                 const ahora = new Date();
                 const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -816,12 +846,13 @@
             });
         }
 
-        // Exportación con PSQ y Detalle de Cajas Físicas
+        // Exportación CSV con columnas separadas para Discrepancia, Cajas y Piezas (Sin celdas agrupadas)
         function exportToExcelModal() {
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
 
-            let csv = "ID\tFecha_Hora\tEmpleado\tPSQ\tDestino\tCarton\tTotal_Arts\tArticulos_y_Cajas\tTipo_Discrepancia\tDetalle_Discrepancias\n";
+            let csv = "ID\tFecha_Hora\tEmpleado\tPSQ\tDestino\tCarton\tTotal_Arts\tArticulos_y_Cajas\tTipo_Discrepancia\tDisc_Codigo\tDisc_Cajas\tDisc_Piezas\n";
+            
             registros.forEach((r, idx) => {
                 let artsDetalleArr = [];
                 if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
@@ -831,8 +862,24 @@
                 }
                 let artsStr = artsDetalleArr.map(item => `${item.codigo} [Cajas:${item.cajas}]`).join('; ');
 
-                let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo} Cajas:${d.cajas} Pzs:${d.piezas}`).join('; ');
-                csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t"${r.psq || 'N/A'}"\t${r.destino}\t${r.carton}\t${artsDetalleArr.length}\t"${artsStr}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
+                if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
+                    // Si hay múltiples filas de discrepancias en el registro, generamos una línea CSV por cada discrepancia para separarlas en columnas independientes
+                    r.discrepanciasDetalle.forEach((d, dIdx) => {
+                        const empVal = dIdx === 0 ? r.empleado : "";
+                        const fechaVal = dIdx === 0 ? `"${r.fechaHora || 'N/A'}"` : "";
+                        const idVal = dIdx === 0 ? (idx + 1) : "";
+                        const psqVal = dIdx === 0 ? `"${r.psq || 'N/A'}"` : "";
+                        const destVal = dIdx === 0 ? r.destino : "";
+                        const cartonVal = dIdx === 0 ? r.carton : "";
+                        const totalArtsVal = dIdx === 0 ? artsDetalleArr.length : "";
+                        const artsStrVal = dIdx === 0 ? `"${artsStr}"` : "";
+
+                        csv += `${idVal}\t${fechaVal}\t${empVal}\t${psqVal}\t${destVal}\t${cartonVal}\t${totalArtsVal}\t${artsStrVal}\t${d.tipo}\t"${d.codigo || ''}"\t${d.cajas || 0}\t${d.piezas || 0}\n`;
+                    });
+                } else {
+                    // Sin discrepancias detalladas
+                    csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t"${r.psq || 'N/A'}"\t${r.destino}\t${r.carton}\t${artsDetalleArr.length}\t"${artsStr}"\t${r.tipoDiscrepancia}\t""\t0\t0\n`;
+                }
             });
 
             textarea.value = csv;
@@ -852,6 +899,7 @@
 
         function downloadCSVFile() {
             const text = document.getElementById('exportTextarea').value;
+            // BOM UTF-8 (\uFEFF) para garantizar que Excel abra el archivo correctamente sin errores de codificación
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
