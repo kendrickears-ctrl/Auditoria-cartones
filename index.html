@@ -375,7 +375,7 @@
         function addDiscrepancyRow() {
             const defaultType = document.getElementById('selectTipoDiscrepancia').value;
             const tipoFila = (defaultType === 'Sin discrepancia' || defaultType === 'Faltante y Sobrante') ? 'Faltante' : defaultType;
-            discrepancyRowsData.push({ tipo: tipoFila, codigo: '', cajas: '', piezas: '' });
+            discrepancyRowsData.push({ tipo: tipoFila, codigo: '', cajas: '', piezas: '', comentario: '' });
             renderDiscrepancyRows();
         }
 
@@ -402,6 +402,7 @@
                     <button onclick="openCameraScanner('disc_${index}')" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs"><i class="fa-solid fa-camera"></i></button>
                     <input type="number" placeholder="Cajas" value="${item.cajas || ''}" oninput="updateDiscField(${index}, 'cajas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
                     <input type="number" placeholder="Piezas" value="${item.piezas || ''}" oninput="updateDiscField(${index}, 'piezas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
+                    <input type="text" placeholder="Comentario" value="${item.comentario || ''}" oninput="updateDiscField(${index}, 'comentario', this.value)" class="flex-1 min-w-[120px] border rounded p-1.5 text-xs outline-none">
                     <button onclick="removeDiscrepancyRow(${index})" class="text-red-500 hover:text-red-700 px-1 text-sm"><i class="fa-solid fa-trash-can"></i></button>
                 `;
                 list.appendChild(row);
@@ -561,10 +562,14 @@
                 cancelarEdicion();
             } else {
                 const ahora = new Date();
-                const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const fechaStr = ahora.toLocaleDateString();
+                const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const fechaHoraStr = fechaStr + ' ' + horaStr;
 
                 const nuevoRegistro = {
                     id: Date.now(),
+                    fecha: fechaStr,
+                    hora: horaStr,
                     fechaHora: fechaHoraStr,
                     empleado,
                     psq: psq || 'N/A',
@@ -732,12 +737,13 @@
             });
         }
 
-        // --- EXPORTACIÓN CSV CORREGIDA: COLUMNAS SEPARADAS Y COMPATIBILIDAD CON EXCEL ---
+        // --- EXPORTACIÓN CSV PROFESIONAL (COMPATIBLE CON EXCEL EN ESPAÑOL, PUNTO Y COMA, SKU TEXTO Y COLUMNAS SEPARADAS) ---
         function exportToExcelModal() {
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
 
-            let csv = "ID\tFecha_Hora\tEmpleado\tPSQ\tDestino\tCarton\tTotal_Arts\tArticulos_y_Cajas\tTipo_Discrepancia\tDisc_Codigo\tDisc_Cajas\tDisc_Piezas\n";
+            // Encabezados solicitados separados por punto y coma (;)
+            let csv = "Orden;SKU;Cajas solicitadas;Cajas auditadas;Faltantes;Piezas faltantes;Sobrantes;Piezas sobrantes;Mermas;Piezas con merma;Códigos solicitados;Códigos contabilizados;Diferencia;Comentario de discrepancia;Tarimas contadas;Fecha;Hora;Empleado\n";
             
             registros.forEach((r, idx) => {
                 let artsDetalleArr = [];
@@ -746,23 +752,45 @@
                 } else if (r.articulos && Array.isArray(r.articulos)) {
                     artsDetalleArr = r.articulos.map(c => ({ codigo: c, cajas: 1 }));
                 }
-                let artsStr = artsDetalleArr.map(item => `${item.codigo} [Cajas:${item.cajas}]`).join('; ');
+
+                const ordenVal = idx + 1;
+                const psqVal = `="${r.psq || 'N/A'}"`;
+                const fechaVal = `"${r.fecha || (r.fechaHora ? r.fechaHora.split(' ')[0] : 'N/A')}"`;
+                const horaVal = `"${r.hora || (r.fechaHora ? r.fechaHora.split(' ').slice(1).join(' ') : 'N/A')}"`;
+                const empleadoVal = `"${r.empleado || ''}"`;
+                const tarimasVal = 1; // Tarima estándar por registro de cartón
 
                 if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
-                    r.discrepanciasDetalle.forEach((d, dIdx) => {
-                        const empVal = dIdx === 0 ? r.empleado : "";
-                        const fechaVal = dIdx === 0 ? `"${r.fechaHora || 'N/A'}"` : "";
-                        const idVal = dIdx === 0 ? (idx + 1) : "";
-                        const psqVal = dIdx === 0 ? `"${r.psq || 'N/A'}"` : "";
-                        const destVal = dIdx === 0 ? r.destino : "";
-                        const cartonVal = dIdx === 0 ? r.carton : "";
-                        const totalArtsVal = dIdx === 0 ? artsDetalleArr.length : "";
-                        const artsStrVal = dIdx === 0 ? `"${artsStr}"` : "";
+                    r.discrepanciasDetalle.forEach(d => {
+                        const skuVal = `="${d.codigo || ''}"`;
+                        const cajasAuditadas = d.cajas ? parseInt(d.cajas) : 0;
+                        const piezasVal = d.piezas ? parseInt(d.piezas) : 0;
+                        const comentarioVal = `"${(d.comentario || '').replace(/"/g, '""')}"`;
 
-                        csv += `${idVal}\t${fechaVal}\t${empVal}\t${psqVal}\t${destVal}\t${cartonVal}\t${totalArtsVal}\t${artsStrVal}\t${d.tipo}\t"${d.codigo || ''}"\t${d.cajas || 0}\t${d.piezas || 0}\n`;
+                        let fCajas = 0, fPzs = 0, sCajas = 0, sPzs = 0, mCajas = 0, mPzs = 0;
+                        if (d.tipo === 'Faltante') { fCajas = cajasAuditadas; fPzs = piezasVal; }
+                        else if (d.tipo === 'Sobrante') { sCajas = cajasAuditadas; sPzs = piezasVal; }
+                        else if (d.tipo === 'Merma') { mCajas = cajasAuditadas; mPzs = piezasVal; }
+
+                        const codigosSolicitados = artsDetalleArr.length;
+                        const codigosContabilizados = codigosSolicitados + (sCajas - fCajas);
+                        const diferencia = sCajas - fCajas;
+
+                        csv += `${ordenVal};${skuVal};${codigosSolicitados};${cajasAuditadas};${fCajas};${fPzs};${sCajas};${sPzs};${mCajas};${mPzs};${codigosSolicitados};${codigosContabilizados};${diferencia};${comentarioVal};${tarimasVal};${fechaVal};${horaVal};${empleadoVal}\n`;
                     });
                 } else {
-                    csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t"${r.psq || 'N/A'}"\t${r.destino}\t${r.carton}\t${artsDetalleArr.length}\t"${artsStr}"\t${r.tipoDiscrepancia}\t""\t0\t0\n`;
+                    // Si no hay discrepancias detalladas pero hay artículos escaneados
+                    if (artsDetalleArr.length > 0) {
+                        artsDetalleArr.forEach(art => {
+                            const skuVal = `="${art.codigo}"`;
+                            const cajasAuditadas = art.cajas || 0;
+                            csv += `${ordenVal};${skuVal};${cajasAuditadas};${cajasAuditadas};0;0;0;0;0;0;${cajasAuditadas};${cajasAuditadas};0;"";${tarimasVal};${fechaVal};${horaVal};${empleadoVal}\n`;
+                        });
+                    } else {
+                        // Registro general sin artículos detallados
+                        const skuVal = `="${r.carton}"`;
+                        csv += `${ordenVal};${skuVal};0;0;0;0;0;0;0;0;0;0;0;"";${tarimasVal};${fechaVal};${horaVal};${empleadoVal}\n`;
+                    }
                 }
             });
 
@@ -783,7 +811,7 @@
 
         function downloadCSVFile() {
             const text = document.getElementById('exportTextarea').value;
-            // Uso estricto de BOM UTF-8 para que Excel abra el archivo directamente sin errores
+            // Uso estricto de BOM UTF-8 (\uFEFF) y punto y coma (;) para compatibilidad total con Excel en español
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
