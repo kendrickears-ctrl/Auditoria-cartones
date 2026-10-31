@@ -175,8 +175,6 @@
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
-            <!-- Canvas oculto para procesar los fotogramas del escáner -->
-            <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
                 <p class="text-sm">Iniciando cámara...</p>
@@ -218,8 +216,7 @@
         let listaArticulos = [];
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
-        let mediaStream = null;
-        let scanInterval = null;
+        let codeReader = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
 
@@ -349,7 +346,7 @@
             }
         }
 
-        // --- NATIVE GETUSERMEDIA + ZXING CODE READER ENGINE ---
+        // --- ZXing Native BrowserMultiFormatReader Engine (Fix Black Screen) ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -361,74 +358,33 @@
             loading.classList.remove('hidden');
             statusText.textContent = "Iniciando cámara trasera...";
 
-            // Asegurar que cualquier stream anterior esté cerrado
             await closeCameraScannerAsync();
 
             try {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("getUserMedia no soportado en este navegador.");
+                if (!window.ZXing) {
+                    throw new Error("Librería ZXing no cargada.");
                 }
 
-                // Petición limpia y nativa de la cámara trasera sin restricciones conflictivas de tamaño
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: "environment" } },
-                    audio: false
-                });
+                codeReader = new ZXing.BrowserMultiFormatReader();
 
-                videoElement.srcObject = mediaStream;
-                
-                // Esperar a que el video comience a reproducirse de forma segura en iOS y Android
-                await videoElement.play().catch(e => console.log("Play auto-resume:", e));
+                // Obtener dispositivos de video disponibles para priorizar la cámara trasera
+                const videoInputDevices = await codeReader.listVideoInputDevices();
+                let selectedDeviceId = null;
+
+                if (videoInputDevices && videoInputDevices.length > 0) {
+                    const backCamera = videoInputDevices.find(device => 
+                        device.label.toLowerCase().includes('back') || 
+                        device.label.toLowerCase().includes('trasera') || 
+                        device.label.toLowerCase().includes('environment')
+                    );
+                    selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
+                }
 
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                startDecodingLoop(videoElement);
-
-            } catch (err) {
-                loading.classList.add('hidden');
-                console.error("Error al iniciar cámara:", err);
-                
-                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.";
-                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
-                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-                    errorMsg = "No se encontró una cámara trasera disponible.";
-                } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
-                    errorMsg = "La cámara está siendo utilizada por otra aplicación.";
-                }
-                
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
-            }
-        }
-
-        function startDecodingLoop(videoElement) {
-            const canvas = document.getElementById('hiddenCanvas');
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            const codeReader = new ZXing.BrowserMultiFormatReader();
-
-            scanInterval = setInterval(() => {
-                if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-                    if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
-                        canvas.width = videoElement.videoWidth;
-                        canvas.height = videoElement.videoHeight;
-                    }
-                    
-                    try {
-                        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-                        // Decodificar el fotograma actual usando ZXing
-                        codeReader.decodeFromImageUrl(canvas.toDataURL()) // o decodificación directa por canvas binario
-                        // Como ZXing UMD ofrece decodeFromImageElement o decodeFromCanvas:
-                        // Vamos a usar una decodificación limpia por elemento de imagen o canvas
-                    } catch (e) {
-                        // Continuar intentando en el siguiente ciclo
-                    }
-                }
-            }, 250);
-
-            // Método alternativo ultra-robusto usando el lector nativo por elemento de video de ZXing si está disponible:
-            try {
-                codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+                // Iniciar decodificación directa usando el elemento de video del DOM
+                await codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement, (result, err) => {
                     if (result) {
                         const codeText = result.getText();
                         const now = Date.now();
@@ -448,29 +404,31 @@
                         closeCameraScanner();
                         handleScannedValue(codeText);
                     }
-                }).catch(err => {
-                    // Ignorar errores de bucle continuo
                 });
-            } catch (ex) {
-                console.error("Error en decodeFromVideoElement:", ex);
+
+            } catch (err) {
+                loading.classList.add('hidden');
+                console.error("Error al iniciar cámara:", err);
+                statusText.innerHTML = `<span class="text-red-400 font-semibold">No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.</span>`;
             }
         }
 
         async function closeCameraScannerAsync() {
-            if (scanInterval) {
-                clearInterval(scanInterval);
-                scanInterval = null;
+            if (codeReader) {
+                try {
+                    codeReader.reset();
+                } catch (e) {
+                    console.warn(e);
+                }
+                codeReader = null;
             }
 
             const videoElement = document.getElementById('cameraVideo');
-            if (videoElement) {
-                videoElement.pause();
+            if (videoElement && videoElement.srcObject) {
+                const stream = videoElement.srcObject;
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
                 videoElement.srcObject = null;
-            }
-
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
             }
         }
 
