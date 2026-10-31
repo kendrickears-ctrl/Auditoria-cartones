@@ -174,7 +174,7 @@
         </div>
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
-            <!-- Atributos obligatorios para iOS: playsinline, webkit-playsinline, autoplay, muted -->
+            <!-- Atributos obligatorios para iOS y Android: playsinline, webkit-playsinline, autoplay, muted -->
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
@@ -348,7 +348,7 @@
             }
         }
 
-        // Camera & ZXing Multiplatform Barcode Reader for iPhone & Android
+        // Camera & ZXing Multiplatform Barcode Reader for iPhone & Android (Optimized & Synchronized)
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -360,36 +360,38 @@
             loading.classList.remove('hidden');
             statusText.textContent = "Iniciando cámara trasera...";
 
-            // Evitar múltiples instancias simultáneas
-            if (isScanningActive) {
+            // Garantizar cierre completo y liberación de streams anteriores antes de iniciar una nueva instancia
+            if (isScanningActive || codeReader) {
                 await closeCameraScannerAsync();
             }
 
             try {
                 if (!window.ZXingBrowser) {
-                    throw new Error("Librería ZXing no disponible.");
+                    throw new Error("Librería ZXing no disponible o no cargada.");
                 }
 
                 codeReader = new ZXingBrowser.BrowserMultiFormatReader();
                 isScanningActive = true;
 
-                // Forzar cámara trasera con constraints ideales
+                // Constraints robustos para forzar la cámara trasera en Android (Chrome) e iPhone (Safari/Chrome)
                 const constraints = {
                     video: {
-                        facingMode: { ideal: "environment" }
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     }
                 };
 
                 loading.classList.add('hidden');
-                statusText.textContent = "Apunta al código de barras...";
+                statusText.textContent = "Apunta la cámara al código de barras...";
 
-                // Iniciar lectura continua con decodeFromConstraints compatible con iPhone y Android
+                // Iniciar decodificación continua con control estricto de errores y reintentos
                 await codeReader.decodeFromConstraints(constraints, videoElement, (result, err) => {
                     if (result && isScanningActive) {
                         const codeText = result.getText();
                         const now = Date.now();
 
-                        // Anti-duplicado: Evitar registrar el mismo código si pasa frente a la cámara antes de 2 segundos
+                        // Protección contra registros duplicados durante 2 segundos
                         if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
                             return;
                         }
@@ -405,34 +407,50 @@
                         handleScannedValue(codeText);
                     }
                     if (err && !(err instanceof ZXingBrowser.NotFoundException)) {
-                        console.warn("Lectura en progreso...", err);
+                        // Ignorar errores menores de cuadro no encontrado para no saturar la consola
                     }
                 });
 
             } catch (err) {
                 loading.classList.add('hidden');
+                isScanningActive = false;
                 console.error("Error al iniciar cámara:", err);
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.</span>`;
+                
+                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.";
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
+                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+                    errorMsg = "No se encontró una cámara trasera disponible en el dispositivo.";
+                } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+                    errorMsg = "La cámara está siendo utilizada por otra aplicación o pestaña.";
+                }
+                
+                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
             }
         }
 
         async function closeCameraScannerAsync() {
             isScanningActive = false;
+            
             if (codeReader) {
                 try {
                     codeReader.stopContinuousDecode();
                     codeReader.reset();
                 } catch (e) {
-                    console.error(e);
+                    console.warn("Advertencia al reiniciar codeReader:", e);
                 }
                 codeReader = null;
             }
+
             const videoElement = document.getElementById('cameraVideo');
-            if (videoElement && videoElement.srcObject) {
-                const stream = videoElement.srcObject;
-                const tracks = stream.getTracks();
-                tracks.forEach(track => track.stop());
-                videoElement.srcObject = null;
+            if (videoElement) {
+                if (videoElement.srcObject) {
+                    const stream = videoElement.srcObject;
+                    const tracks = stream.getTracks();
+                    tracks.forEach(track => track.stop());
+                    videoElement.srcObject = null;
+                }
+                videoElement.pause();
             }
         }
 
