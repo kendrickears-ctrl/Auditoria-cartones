@@ -88,21 +88,18 @@
                 </div>
             </div>
 
-            <!-- 5. Artículos Escaneados y Cajas Físicas -->
+            <!-- 5. Artículos Escaneados con Ráfaga en la misma fila -->
             <div>
                 <label class="block text-xs font-bold text-gray-600 uppercase mb-1 flex justify-between">
-                    <span>5. Artículos Escaneados y Cajas (<span id="artCount">0</span>)</span>
+                    <span>5. Artículos Escaneados (<span id="artCount">0</span>)</span>
                     <button onclick="clearArticulos()" class="text-red-500 text-[11px] hover:underline">Limpiar lista</button>
                 </label>
-                <div class="flex flex-col md:flex-row gap-2 mb-2">
-                    <input type="text" id="inputArticuloUnico" placeholder="Escanear artículo + Enter" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" onkeypress="handleArticuloKeypress(event)">
-                    <input type="number" id="inputCajasFisicas" placeholder="Cajas físicas" min="1" value="1" class="w-full md:w-28 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <div class="flex space-x-1">
-                        <button onclick="addArticuloManual()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium shadow">Agregar</button>
-                        <button onclick="openCameraScanner('articulos_burst')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium shadow flex items-center space-x-1">
-                            <i class="fa-solid fa-camera-rotate"></i><span>Ráfaga</span>
-                        </button>
-                    </div>
+                <div class="flex flex-row items-center gap-2 mb-2">
+                    <input type="text" id="inputArticuloUnico" placeholder="Escanear o ingresar artículo + Enter" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none min-w-0" onkeypress="handleArticuloKeypress(event)">
+                    <button onclick="addArticuloManual()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2.5 rounded-lg text-xs font-medium shadow whitespace-nowrap">Agregar</button>
+                    <button onclick="openCameraScanner('articulos_burst')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2.5 rounded-lg text-xs font-medium shadow flex items-center space-x-1 whitespace-nowrap">
+                        <i class="fa-solid fa-camera-rotate"></i><span>Ráfaga</span>
+                    </button>
                 </div>
                 <!-- Lista detallada de artículos con sus cajas físicas -->
                 <div id="containerListaArticulos" class="space-y-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50 text-xs">
@@ -284,7 +281,7 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
-        // Artículos manejo con cajas físicas
+        // Artículos manejo con flujo de cajas físicas obligatorio y sin herencia
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -294,13 +291,46 @@
 
         function addArticuloManual() {
             const val = document.getElementById('inputArticuloUnico').value.trim();
-            const cajasVal = parseInt(document.getElementById('inputCajasFisicas').value) || 1;
             if (val) {
-                listaArticulosDetalle.push({ codigo: val, cajas: cajasVal });
                 document.getElementById('inputArticuloUnico').value = '';
-                document.getElementById('inputCajasFisicas').value = '1';
-                updateArticulosView();
+                solicitarCantidadCajasParaArticulo(val);
             }
+        }
+
+        function solicitarCantidadCajasParaArticulo(codigoArticulo) {
+            Swal.fire({
+                title: 'Cantidad de Cajas Físicas',
+                html: `<p class="text-sm text-gray-600 mb-2">Artículo detectado:</p>
+                       <p class="font-mono font-bold text-emerald-700 text-lg mb-3">${codigoArticulo}</p>
+                       <p class="text-xs text-gray-500 mb-1">Escribe la cantidad de cajas físicas (campo vacío)</p>`,
+                input: 'number',
+                inputAttributes: {
+                    min: 1,
+                    step: 1,
+                    placeholder: 'Escribe cantidad de cajas...'
+                },
+                inputValue: '', // Asegura que inicie completamente vacío sin heredar valores previos
+                showCancelButton: true,
+                confirmButtonText: 'Confirmar',
+                cancelButtonText: 'Cancelar',
+                allowOutsideClick: false,
+                inputValidator: (value) => {
+                    if (!value || parseInt(value) <= 0) {
+                        return 'Debes ingresar una cantidad válida de cajas mayores a 0';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    const cantidadCajas = parseInt(result.value);
+                    listaArticulosDetalle.push({ codigo: codigoArticulo, cajas: cantidadCajas });
+                    updateArticulosView();
+
+                    // Si estaba activo el modo ráfaga, reanudamos el escaneo si el modal sigue abierto
+                    if (activeCameraTarget === 'articulos_burst' && !document.getElementById('cameraModal').classList.contains('hidden')) {
+                        // El intervalo de escaneo sigue corriendo en segundo plano o se reanuda
+                    }
+                }
+            });
         }
 
         function removeArticuloDetalle(index) {
@@ -513,8 +543,14 @@
                                 navigator.vibrate(100);
                             }
 
-                            closeCameraScanner();
-                            handleScannedValue(codeText);
+                            // Si es objetivo ráfaga de artículos, cerramos la cámara temporalmente para pedir cajas o manejamos el flujo
+                            if (activeCameraTarget === 'articulos_burst') {
+                                closeCameraScanner();
+                                solicitarCantidadCajasParaArticulo(codeText);
+                            } else {
+                                closeCameraScanner();
+                                handleScannedValue(codeText);
+                            }
                         }
                     } catch (e) {
                         try { multiFormatReader.reset(); } catch(err) {}
@@ -553,19 +589,19 @@
         function submitManualCameraFallback() {
             const val = document.getElementById('manualCameraFallback').value.trim();
             if (val) {
-                handleScannedValue(val);
-                document.getElementById('manualCameraFallback').value = '';
                 closeCameraScanner();
+                if (activeCameraTarget === 'articulos_burst') {
+                    solicitarCantidadCajasParaArticulo(val);
+                } else {
+                    handleScannedValue(val);
+                }
+                document.getElementById('manualCameraFallback').value = '';
             }
         }
 
         function handleScannedValue(code) {
             if (activeCameraTarget === 'carton') {
                 document.getElementById('inputCarton').value = code;
-            } else if (activeCameraTarget === 'articulos_burst') {
-                const cajasVal = parseInt(document.getElementById('inputCajasFisicas').value) || 1;
-                listaArticulosDetalle.push({ codigo: code, cajas: cajasVal });
-                updateArticulosView();
             } else if (activeCameraTarget && activeCameraTarget.startsWith('disc_')) {
                 const idx = parseInt(activeCameraTarget.split('_')[1]);
                 if (discrepancyRowsData[idx]) {
@@ -641,7 +677,6 @@
             document.getElementById('inputDestino').value = registro.destino !== 'N/A' ? registro.destino : '';
             document.getElementById('inputCarton').value = registro.carton;
             
-            // Cargar artículos con detalle de cajas (compatibilidad con registros antiguos si usaban string[])
             if (registro.articulosDetalle && Array.isArray(registro.articulosDetalle)) {
                 listaArticulosDetalle = JSON.parse(JSON.stringify(registro.articulosDetalle));
             } else if (registro.articulos && Array.isArray(registro.articulos)) {
@@ -659,7 +694,6 @@
                 renderDiscrepancyRows();
             }
 
-            // Cambiar modo visual del formulario a edición
             document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-600 mr-2"></i> Editando Auditoría (#${id})`;
             document.getElementById('btnGuardarText').textContent = "Actualizar Registro";
             document.getElementById('btnGuardarRegistro').classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
@@ -685,7 +719,6 @@
             document.getElementById('inputPsq').value = '';
             document.getElementById('inputDestino').value = '';
             document.getElementById('inputCarton').value = '';
-            document.getElementById('inputCajasFisicas').value = '1';
             listaArticulosDetalle = [];
             discrepancyRowsData = [];
             updateArticulosView();
@@ -748,7 +781,6 @@
 
             tbody.innerHTML = '';
             registros.forEach((r, idx) => {
-                // Formatear artículos y cajas para la tabla
                 let artsDetalleArr = [];
                 if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
                     artsDetalleArr = r.articulosDetalle;
