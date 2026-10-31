@@ -186,25 +186,19 @@
     <div id="cameraModal" class="fixed inset-0 bg-black/80 z-50 hidden flex flex-col justify-between p-4">
         <div class="flex justify-between items-center text-white">
             <h3 id="cameraModalTitle" class="font-bold text-base">Escaneando código...</h3>
-            <div class="space-x-2">
-                <button onclick="reiniciarCamaraScanner()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold" title="Reiniciar si se congela">
-                    <i class="fa-solid fa-rotate-right mr-1"></i> Reiniciar
-                </button>
-                <button onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
-                    <i class="fa-solid fa-xmark mr-1"></i> Cerrar
-                </button>
-            </div>
+            <button onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
+                <i class="fa-solid fa-xmark mr-1"></i> Cerrar
+            </button>
         </div>
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
+            <!-- Elemento de video nativo para ZXing Browser -->
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
-            <!-- Canvas oculto para procesamiento de fotogramas optimizado -->
-            <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
-                <p class="text-sm">Iniciando cámara y enfoque...</p>
+                <p class="text-sm">Iniciando cámara...</p>
             </div>
-            <div class="absolute inset-16 border-2 border-dashed border-emerald-400/60 rounded-lg pointer-events-none"></div>
+            <div class="absolute inset-12 border-2 border-dashed border-emerald-400/60 rounded-lg pointer-events-none"></div>
         </div>
 
         <div class="max-w-md mx-auto w-full text-center space-y-2">
@@ -241,8 +235,8 @@
         let listaArticulosDetalle = []; // Almacena objetos { codigo, cajas }
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
-        let mediaStream = null;
-        let scanInterval = null;
+        let codeReader = null;
+        let isScanningActive = false;
         let lastScannedCode = "";
         let lastScannedTime = 0;
         let editingRecordId = null; // ID del registro en edición, null si es nuevo
@@ -425,7 +419,7 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO OPTIMIZADO PARA ENFOQUE Y VELOCIDAD EN IPHONE Y ANDROID ---
+        // --- MOTOR ORIGINAL DE CÁMARA ESTABLE (ZXing BrowserMultiFormatReader) ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -435,181 +429,81 @@
 
             modal.classList.remove('hidden');
             loading.classList.remove('hidden');
-            statusText.textContent = "Iniciando cámara y optimizando enfoque...";
+            statusText.textContent = "Iniciando cámara trasera...";
 
-            await closeCameraScannerAsync();
+            if (isScanningActive || codeReader) {
+                await closeCameraScannerAsync();
+            }
 
             try {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("getUserMedia no soportado en este navegador.");
+                if (!window.ZXingBrowser) {
+                    throw new Error("Librería ZXing Browser no disponible.");
                 }
+
+                codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+                isScanningActive = true;
 
                 const constraints = {
                     video: {
-                        facingMode: { ideal: "environment" },
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        advanced: [{ focusMode: "continuous" }]
-                    },
-                    audio: false
+                        facingMode: { ideal: "environment" }
+                    }
                 };
-
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                } catch (constraintErr) {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { ideal: "environment" } },
-                        audio: false
-                    });
-                }
-
-                videoElement.srcObject = mediaStream;
-                await videoElement.play().catch(e => console.log("Play warning:", e));
 
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                startOptimizedCanvasDecodingLoop(videoElement);
+                await codeReader.decodeFromConstraints(constraints, videoElement, (result, err) => {
+                    if (result && isScanningActive) {
+                        const codeText = result.getText();
+                        const now = Date.now();
+
+                        if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
+                            return;
+                        }
+
+                        lastScannedCode = codeText;
+                        lastScannedTime = now;
+
+                        if (navigator.vibrate) {
+                            navigator.vibrate(100);
+                        }
+
+                        closeCameraScanner();
+
+                        if (activeCameraTarget === 'articulos_burst') {
+                            solicitarCantidadCajasParaArticulo(codeText);
+                        } else {
+                            handleScannedValue(codeText);
+                        }
+                    }
+                });
 
             } catch (err) {
                 loading.classList.add('hidden');
+                isScanningActive = false;
                 console.error("Error al iniciar cámara:", err);
-                
-                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.";
-                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
-                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-                    errorMsg = "No se encontró una cámara trasera disponible.";
-                } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
-                    errorMsg = "La cámara está siendo utilizada por otra aplicación o pestaña.";
-                }
-                
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
+                statusText.innerHTML = `<span class="text-red-400 font-semibold">No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.</span>`;
             }
-        }
-
-        async function reiniciarCamaraScanner() {
-            const targetActual = activeCameraTarget;
-            await closeCameraScannerAsync();
-            setTimeout(() => {
-                if (targetActual) {
-                    openCameraScanner(targetActual);
-                }
-            }, 300);
-        }
-
-        function startOptimizedCanvasDecodingLoop(videoElement) {
-            const canvas = document.getElementById('hiddenCanvas');
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            
-            let multiFormatReader;
-            try {
-                multiFormatReader = new ZXing.MultiFormatReader();
-                
-                const hints = new Map();
-                const formats = [
-                    ZXing.BarcodeFormat.EAN_13,
-                    ZXing.BarcodeFormat.EAN_8,
-                    ZXing.BarcodeFormat.UPC_A,
-                    ZXing.BarcodeFormat.UPC_E,
-                    ZXing.BarcodeFormat.CODE_128,
-                    ZXing.BarcodeFormat.CODE_39,
-                    ZXing.BarcodeFormat.CODE_93,
-                    ZXing.BarcodeFormat.ITF,
-                    ZXing.BarcodeFormat.QR_CODE,
-                    ZXing.BarcodeFormat.DATA_MATRIX
-                ];
-                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-                multiFormatReader.setHints(hints);
-
-            } catch (e) {
-                console.error("Error al configurar MultiFormatReader:", e);
-                return;
-            }
-
-            scanInterval = setInterval(() => {
-                if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-                    if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
-                        return;
-                    }
-
-                    if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
-                        canvas.width = videoElement.videoWidth;
-                        canvas.height = videoElement.videoHeight;
-                    }
-
-                    try {
-                        const cropWidth = Math.floor(canvas.width * 0.85);
-                        const cropHeight = Math.floor(canvas.height * 0.85);
-                        const startX = Math.floor((canvas.width - cropWidth) / 2);
-                        const startY = Math.floor((canvas.height - cropHeight) / 2);
-
-                        ctx.drawImage(videoElement, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-                        
-                        const tempCanvasW = canvas.width;
-                        const tempCanvasH = canvas.height;
-                        canvas.width = cropWidth;
-                        canvas.height = cropHeight;
-
-                        const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-                        const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-                        
-                        const result = multiFormatReader.decodeWithState(binaryBitmap);
-
-                        canvas.width = tempCanvasW;
-                        canvas.height = tempCanvasH;
-
-                        if (result) {
-                            const codeText = result.getText();
-                            const now = Date.now();
-
-                            if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
-                                multiFormatReader.reset();
-                                return;
-                            }
-
-                            lastScannedCode = codeText;
-                            lastScannedTime = now;
-
-                            if (navigator.vibrate) {
-                                navigator.vibrate(100);
-                            }
-
-                            if (activeCameraTarget === 'articulos_burst') {
-                                closeCameraScanner();
-                                solicitarCantidadCajasParaArticulo(codeText);
-                            } else {
-                                closeCameraScanner();
-                                handleScannedValue(codeText);
-                            }
-                        }
-                    } catch (e) {
-                        try { multiFormatReader.reset(); } catch(err) {}
-
-                        if (!(e instanceof ZXing.NotFoundException) && !(e instanceof ZXing.ChecksumException) && !(e instanceof ZXing.FormatException)) {
-                            console.warn("Aviso técnico en decodificación:", e);
-                        }
-                    }
-                }
-            }, 120);
         }
 
         async function closeCameraScannerAsync() {
-            if (scanInterval) {
-                clearInterval(scanInterval);
-                scanInterval = null;
+            isScanningActive = false;
+            if (codeReader) {
+                try {
+                    codeReader.stopContinuousDecode();
+                    codeReader.reset();
+                } catch (e) {
+                    console.warn(e);
+                }
+                codeReader = null;
             }
 
             const videoElement = document.getElementById('cameraVideo');
-            if (videoElement) {
-                videoElement.pause();
+            if (videoElement && videoElement.srcObject) {
+                const stream = videoElement.srcObject;
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
                 videoElement.srcObject = null;
-            }
-
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
             }
         }
 
@@ -846,7 +740,7 @@
             });
         }
 
-        // Exportación CSV con columnas separadas para Discrepancia, Cajas y Piezas (Sin celdas agrupadas)
+        // Exportación CSV con columnas separadas y formato abierto para Excel
         function exportToExcelModal() {
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
@@ -863,7 +757,6 @@
                 let artsStr = artsDetalleArr.map(item => `${item.codigo} [Cajas:${item.cajas}]`).join('; ');
 
                 if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
-                    // Si hay múltiples filas de discrepancias en el registro, generamos una línea CSV por cada discrepancia para separarlas en columnas independientes
                     r.discrepanciasDetalle.forEach((d, dIdx) => {
                         const empVal = dIdx === 0 ? r.empleado : "";
                         const fechaVal = dIdx === 0 ? `"${r.fechaHora || 'N/A'}"` : "";
@@ -877,7 +770,6 @@
                         csv += `${idVal}\t${fechaVal}\t${empVal}\t${psqVal}\t${destVal}\t${cartonVal}\t${totalArtsVal}\t${artsStrVal}\t${d.tipo}\t"${d.codigo || ''}"\t${d.cajas || 0}\t${d.piezas || 0}\n`;
                     });
                 } else {
-                    // Sin discrepancias detalladas
                     csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t"${r.psq || 'N/A'}"\t${r.destino}\t${r.carton}\t${artsDetalleArr.length}\t"${artsStr}"\t${r.tipoDiscrepancia}\t""\t0\t0\n`;
                 }
             });
@@ -899,7 +791,6 @@
 
         function downloadCSVFile() {
             const text = document.getElementById('exportTextarea').value;
-            // BOM UTF-8 (\uFEFF) para garantizar que Excel abra el archivo correctamente sin errores de codificación
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
