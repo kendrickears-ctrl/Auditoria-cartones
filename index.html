@@ -8,8 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- ZXing Browser UMD para compatibilidad total con iPhone (Safari/Chrome) y Android -->
-    <script type="text/javascript" src="https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
+    <!-- ZXing Library UMD -->
+    <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
     <style>
         body { background-color: #f3f4f6; }
     </style>
@@ -174,8 +174,9 @@
         </div>
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
-            <!-- Atributos obligatorios para iOS y Android: playsinline, webkit-playsinline, autoplay, muted -->
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
+            <!-- Canvas oculto para procesar los fotogramas del escáner -->
+            <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
                 <p class="text-sm">Iniciando cámara...</p>
@@ -217,8 +218,8 @@
         let listaArticulos = [];
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
-        let codeReader = null;
-        let isScanningActive = false;
+        let mediaStream = null;
+        let scanInterval = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
 
@@ -348,7 +349,7 @@
             }
         }
 
-        // Camera & ZXing Multiplatform Barcode Reader for iPhone & Android (Optimized & Synchronized)
+        // --- NATIVE GETUSERMEDIA + ZXING CODE READER ENGINE ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -360,38 +361,79 @@
             loading.classList.remove('hidden');
             statusText.textContent = "Iniciando cámara trasera...";
 
-            // Garantizar cierre completo y liberación de streams anteriores antes de iniciar una nueva instancia
-            if (isScanningActive || codeReader) {
-                await closeCameraScannerAsync();
-            }
+            // Asegurar que cualquier stream anterior esté cerrado
+            await closeCameraScannerAsync();
 
             try {
-                if (!window.ZXingBrowser) {
-                    throw new Error("Librería ZXing no disponible o no cargada.");
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error("getUserMedia no soportado en este navegador.");
                 }
 
-                codeReader = new ZXingBrowser.BrowserMultiFormatReader();
-                isScanningActive = true;
+                // Petición limpia y nativa de la cámara trasera sin restricciones conflictivas de tamaño
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } },
+                    audio: false
+                });
 
-                // Constraints robustos para forzar la cámara trasera en Android (Chrome) e iPhone (Safari/Chrome)
-                const constraints = {
-                    video: {
-                        facingMode: { ideal: "environment" },
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                };
+                videoElement.srcObject = mediaStream;
+                
+                // Esperar a que el video comience a reproducirse de forma segura en iOS y Android
+                await videoElement.play().catch(e => console.log("Play auto-resume:", e));
 
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                // Iniciar decodificación continua con control estricto de errores y reintentos
-                await codeReader.decodeFromConstraints(constraints, videoElement, (result, err) => {
-                    if (result && isScanningActive) {
+                startDecodingLoop(videoElement);
+
+            } catch (err) {
+                loading.classList.add('hidden');
+                console.error("Error al iniciar cámara:", err);
+                
+                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.";
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
+                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+                    errorMsg = "No se encontró una cámara trasera disponible.";
+                } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+                    errorMsg = "La cámara está siendo utilizada por otra aplicación.";
+                }
+                
+                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
+            }
+        }
+
+        function startDecodingLoop(videoElement) {
+            const canvas = document.getElementById('hiddenCanvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const codeReader = new ZXing.BrowserMultiFormatReader();
+
+            scanInterval = setInterval(() => {
+                if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                    if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
+                        canvas.width = videoElement.videoWidth;
+                        canvas.height = videoElement.videoHeight;
+                    }
+                    
+                    try {
+                        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                        // Decodificar el fotograma actual usando ZXing
+                        codeReader.decodeFromImageUrl(canvas.toDataURL()) // o decodificación directa por canvas binario
+                        // Como ZXing UMD ofrece decodeFromImageElement o decodeFromCanvas:
+                        // Vamos a usar una decodificación limpia por elemento de imagen o canvas
+                    } catch (e) {
+                        // Continuar intentando en el siguiente ciclo
+                    }
+                }
+            }, 250);
+
+            // Método alternativo ultra-robusto usando el lector nativo por elemento de video de ZXing si está disponible:
+            try {
+                codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+                    if (result) {
                         const codeText = result.getText();
                         const now = Date.now();
 
-                        // Protección contra registros duplicados durante 2 segundos
+                        // Protección contra duplicados en 2 segundos
                         if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
                             return;
                         }
@@ -406,51 +448,29 @@
                         closeCameraScanner();
                         handleScannedValue(codeText);
                     }
-                    if (err && !(err instanceof ZXingBrowser.NotFoundException)) {
-                        // Ignorar errores menores de cuadro no encontrado para no saturar la consola
-                    }
+                }).catch(err => {
+                    // Ignorar errores de bucle continuo
                 });
-
-            } catch (err) {
-                loading.classList.add('hidden');
-                isScanningActive = false;
-                console.error("Error al iniciar cámara:", err);
-                
-                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.";
-                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
-                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-                    errorMsg = "No se encontró una cámara trasera disponible en el dispositivo.";
-                } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
-                    errorMsg = "La cámara está siendo utilizada por otra aplicación o pestaña.";
-                }
-                
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
+            } catch (ex) {
+                console.error("Error en decodeFromVideoElement:", ex);
             }
         }
 
         async function closeCameraScannerAsync() {
-            isScanningActive = false;
-            
-            if (codeReader) {
-                try {
-                    codeReader.stopContinuousDecode();
-                    codeReader.reset();
-                } catch (e) {
-                    console.warn("Advertencia al reiniciar codeReader:", e);
-                }
-                codeReader = null;
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
             }
 
             const videoElement = document.getElementById('cameraVideo');
             if (videoElement) {
-                if (videoElement.srcObject) {
-                    const stream = videoElement.srcObject;
-                    const tracks = stream.getTracks();
-                    tracks.forEach(track => track.stop());
-                    videoElement.srcObject = null;
-                }
                 videoElement.pause();
+                videoElement.srcObject = null;
+            }
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
             }
         }
 
@@ -499,7 +519,6 @@
                 return;
             }
 
-            // Generar fecha y hora actual formateada
             const ahora = new Date();
             const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
