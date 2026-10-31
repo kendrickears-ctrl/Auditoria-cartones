@@ -175,6 +175,8 @@
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
+            <!-- Canvas oculto para procesamiento de fotogramas por ZXing -->
+            <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
                 <p class="text-sm">Iniciando cámara...</p>
@@ -216,7 +218,8 @@
         let listaArticulos = [];
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
-        let codeReader = null;
+        let mediaStream = null;
+        let scanInterval = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
 
@@ -346,7 +349,7 @@
             }
         }
 
-        // --- ZXing Native BrowserMultiFormatReader Engine (Fix Black Screen) ---
+        // --- ROBUST NATIVE GETUSERMEDIA + ZXING CANVAS DECODER LOOP ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -361,50 +364,22 @@
             await closeCameraScannerAsync();
 
             try {
-                if (!window.ZXing) {
-                    throw new Error("Librería ZXing no cargada.");
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error("getUserMedia no soportado.");
                 }
 
-                codeReader = new ZXing.BrowserMultiFormatReader();
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } },
+                    audio: false
+                });
 
-                // Obtener dispositivos de video disponibles para priorizar la cámara trasera
-                const videoInputDevices = await codeReader.listVideoInputDevices();
-                let selectedDeviceId = null;
-
-                if (videoInputDevices && videoInputDevices.length > 0) {
-                    const backCamera = videoInputDevices.find(device => 
-                        device.label.toLowerCase().includes('back') || 
-                        device.label.toLowerCase().includes('trasera') || 
-                        device.label.toLowerCase().includes('environment')
-                    );
-                    selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
-                }
+                videoElement.srcObject = mediaStream;
+                await videoElement.play().catch(e => console.log("Play warning:", e));
 
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                // Iniciar decodificación directa usando el elemento de video del DOM
-                await codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement, (result, err) => {
-                    if (result) {
-                        const codeText = result.getText();
-                        const now = Date.now();
-
-                        // Protección contra duplicados en 2 segundos
-                        if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
-                            return;
-                        }
-
-                        lastScannedCode = codeText;
-                        lastScannedTime = now;
-
-                        if (navigator.vibrate) {
-                            navigator.vibrate(100);
-                        }
-
-                        closeCameraScanner();
-                        handleScannedValue(codeText);
-                    }
-                });
+                startCanvasDecodingLoop(videoElement);
 
             } catch (err) {
                 loading.classList.add('hidden');
@@ -413,22 +388,66 @@
             }
         }
 
-        async function closeCameraScannerAsync() {
-            if (codeReader) {
-                try {
-                    codeReader.reset();
-                } catch (e) {
-                    console.warn(e);
+        function startCanvasDecodingLoop(videoElement) {
+            const canvas = document.getElementById('hiddenCanvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const codeReader = new ZXing.BrowserMultiFormatReader();
+
+            scanInterval = setInterval(() => {
+                if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                    if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
+                        canvas.width = videoElement.videoWidth;
+                        canvas.height = videoElement.videoHeight;
+                    }
+
+                    try {
+                        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                        
+                        // Intentar decodificar directamente desde la imagen generada en el canvas
+                        const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+                        const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+                        const result = codeReader.decode(binaryBitmap);
+
+                        if (result) {
+                            const codeText = result.getText();
+                            const now = Date.now();
+
+                            if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
+                                return;
+                            }
+
+                            lastScannedCode = codeText;
+                            lastScannedTime = now;
+
+                            if (navigator.vibrate) {
+                                navigator.vibrate(100);
+                            }
+
+                            closeCameraScanner();
+                            handleScannedValue(codeText);
+                        }
+                    } catch (e) {
+                        // El ciclo continúa de forma fluida si no detecta código en el cuadro actual
+                    }
                 }
-                codeReader = null;
+            }, 200);
+        }
+
+        async function closeCameraScannerAsync() {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
             }
 
             const videoElement = document.getElementById('cameraVideo');
-            if (videoElement && videoElement.srcObject) {
-                const stream = videoElement.srcObject;
-                const tracks = stream.getTracks();
-                tracks.forEach(track => track.stop());
+            if (videoElement) {
+                videoElement.pause();
                 videoElement.srcObject = null;
+            }
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
             }
         }
 
@@ -483,7 +502,7 @@
             const nuevoRegistro = {
                 id: Date.now(),
                 fechaHora: fechaHoraStr,
-                empleado,
+            empleado,
                 destino: destino || 'N/A',
                 carton,
                 articulos: [...listaArticulos],
