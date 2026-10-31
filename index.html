@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- ZXing Library UMD -->
+    <!-- ZXing Library UMD v0.19.1 -->
     <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
     <style>
         body { background-color: #f3f4f6; }
@@ -175,7 +175,7 @@
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
-            <!-- Canvas oculto para procesamiento de fotogramas por ZXing -->
+            <!-- Canvas oculto para procesamiento de fotogramas de alta velocidad -->
             <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
@@ -349,7 +349,7 @@
             }
         }
 
-        // --- ROBUST NATIVE GETUSERMEDIA + ZXING CANVAS DECODER LOOP ---
+        // --- MOTOR DE ESCANEO CONTINUO ÓPTIMO (GETUSERMEDIA + MultiFormatReader + decodeWithState) ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -365,11 +365,16 @@
 
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("getUserMedia no soportado.");
+                    throw new Error("getUserMedia no soportado en este navegador.");
                 }
 
+                // Solicitar cámara trasera con resolución HD adaptativa para móviles
                 mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: "environment" } },
+                    video: { 
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
                     audio: false
                 });
 
@@ -384,17 +389,59 @@
             } catch (err) {
                 loading.classList.add('hidden');
                 console.error("Error al iniciar cámara:", err);
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.</span>`;
+                
+                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.";
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
+                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+                    errorMsg = "No se encontró una cámara trasera disponible.";
+                } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+                    errorMsg = "La cámara está siendo utilizada por otra aplicación o pestaña.";
+                }
+                
+                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
             }
         }
 
         function startCanvasDecodingLoop(videoElement) {
             const canvas = document.getElementById('hiddenCanvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            const codeReader = new ZXing.BrowserMultiFormatReader();
+            
+            let multiFormatReader;
+            try {
+                // Instanciación formal garantizada en ZXing v0.19.1
+                multiFormatReader = new ZXing.MultiFormatReader();
+                
+                // Configuración de formatos comerciales e industriales
+                const hints = new Map();
+                const formats = [
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.CODE_93,
+                    ZXing.BarcodeFormat.ITF,
+                    ZXing.BarcodeFormat.QR_CODE,
+                    ZXing.BarcodeFormat.DATA_MATRIX
+                ];
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                multiFormatReader.setHints(hints);
+
+            } catch (e) {
+                console.error("Error al configurar MultiFormatReader:", e);
+                return;
+            }
 
             scanInterval = setInterval(() => {
                 if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                    // Validar dimensiones reales del video antes de pintar el fotograma
+                    if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+                        return;
+                    }
+
                     if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
                         canvas.width = videoElement.videoWidth;
                         canvas.height = videoElement.videoHeight;
@@ -403,16 +450,19 @@
                     try {
                         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
                         
-                        // Intentar decodificar directamente desde la imagen generada en el canvas
                         const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
                         const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-                        const result = codeReader.decode(binaryBitmap);
+                        
+                        // Uso correcto de decodeWithState para mantener el estado del lector continuo en fotogramas
+                        const result = multiFormatReader.decodeWithState(binaryBitmap);
 
                         if (result) {
                             const codeText = result.getText();
                             const now = Date.now();
 
+                            // Protección anti-duplicados por 2 segundos
                             if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
+                                multiFormatReader.reset();
                                 return;
                             }
 
@@ -427,10 +477,16 @@
                             handleScannedValue(codeText);
                         }
                     } catch (e) {
-                        // El ciclo continúa de forma fluida si no detecta código en el cuadro actual
+                        // Limpiar estado interno del lector en caso de no hallar coincidencia en el fotograma actual
+                        try { multiFormatReader.reset(); } catch(err) {}
+
+                        // NotFoundException y ChecksumException son normales en cuadros vacíos. Se omiten de la consola.
+                        if (!(e instanceof ZXing.NotFoundException) && !(e instanceof ZXing.ChecksumException) && !(e instanceof ZXing.FormatException)) {
+                            console.warn("Aviso técnico en decodificación:", e);
+                        }
                     }
                 }
-            }, 200);
+            }, 150);
         }
 
         async function closeCameraScannerAsync() {
@@ -502,7 +558,7 @@
             const nuevoRegistro = {
                 id: Date.now(),
                 fechaHora: fechaHoraStr,
-            empleado,
+                empleado,
                 destino: destino || 'N/A',
                 carton,
                 articulos: [...listaArticulos],
