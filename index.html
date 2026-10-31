@@ -38,13 +38,18 @@
         <!-- Form Card -->
         <section class="bg-white rounded-xl shadow-md p-5 space-y-4 border border-gray-100">
             <h2 class="text-md font-semibold text-gray-700 border-b pb-2 flex justify-between items-center">
-                <span><i class="fa-solid fa-clipboard-list text-emerald-600 mr-2"></i> Captura de Auditoría</span>
-                <button onclick="resetForm()" class="text-xs text-red-500 hover:text-red-700 flex items-center space-x-1">
-                    <i class="fa-solid fa-rotate-right"></i><span>Limpiar Formulario</span>
-                </button>
+                <span id="formTitleText"><i class="fa-solid fa-clipboard-list text-emerald-600 mr-2"></i> Captura de Auditoría</span>
+                <div class="space-x-2">
+                    <button id="btnCancelarEdicion" onclick="cancelarEdicion()" class="hidden text-xs text-gray-500 hover:text-gray-700 items-center space-x-1">
+                        <i class="fa-solid fa-ban"></i><span>Cancelar Edición</span>
+                    </button>
+                    <button onclick="resetForm()" class="text-xs text-red-500 hover:text-red-700 items-center space-x-1">
+                        <i class="fa-solid fa-rotate-right"></i><span>Limpiar Formulario</span>
+                    </button>
+                </div>
             </h2>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <!-- 1. Empleado -->
                 <div>
                     <label class="block text-xs font-bold text-gray-600 uppercase mb-1 flex justify-between">
@@ -59,16 +64,22 @@
                     </select>
                 </div>
 
-                <!-- 2. Destino -->
+                <!-- 2. PSQ -->
                 <div>
-                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">2. Destino</label>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">2. PSQ</label>
+                    <input type="text" id="inputPsq" placeholder="Ej. PSQ-001" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none">
+                </div>
+
+                <!-- 3. Destino -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">3. Destino</label>
                     <input type="text" id="inputDestino" placeholder="Ej. CEDIS Norte / Anden 3" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none">
                 </div>
             </div>
 
-            <!-- 3. Código de Cartón -->
+            <!-- 4. Código de Cartón -->
             <div>
-                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">3. Código de Cartón</label>
+                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">4. Código de Cartón</label>
                 <div class="flex space-x-2">
                     <input type="text" id="inputCarton" placeholder="Escribe o escanea el cartón" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none">
                     <button onclick="openCameraScanner('carton')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 rounded-lg shadow flex items-center justify-center transition">
@@ -77,25 +88,31 @@
                 </div>
             </div>
 
-            <!-- 4. Artículos Escaneados -->
+            <!-- 5. Artículos Escaneados y Cajas Físicas -->
             <div>
                 <label class="block text-xs font-bold text-gray-600 uppercase mb-1 flex justify-between">
-                    <span>4. Artículos Escaneados (<span id="artCount">0</span>)</span>
+                    <span>5. Artículos Escaneados y Cajas (<span id="artCount">0</span>)</span>
                     <button onclick="clearArticulos()" class="text-red-500 text-[11px] hover:underline">Limpiar lista</button>
                 </label>
-                <div class="flex space-x-2 mb-2">
-                    <input type="text" id="inputArticuloUnico" placeholder="Escanear con pistola láser aquí + Enter" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" onkeypress="handleArticuloKeypress(event)">
-                    <button onclick="addArticuloManual()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium shadow">Agregar</button>
-                    <button onclick="openCameraScanner('articulos_burst')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium shadow flex items-center space-x-1">
-                        <i class="fa-solid fa-camera-rotate"></i><span>Ráfaga</span>
-                    </button>
+                <div class="flex flex-col md:flex-row gap-2 mb-2">
+                    <input type="text" id="inputArticuloUnico" placeholder="Escanear artículo + Enter" class="flex-1 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" onkeypress="handleArticuloKeypress(event)">
+                    <input type="number" id="inputCajasFisicas" placeholder="Cajas físicas" min="1" value="1" class="w-full md:w-28 border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <div class="flex space-x-1">
+                        <button onclick="addArticuloManual()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium shadow">Agregar</button>
+                        <button onclick="openCameraScanner('articulos_burst')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium shadow flex items-center space-x-1">
+                            <i class="fa-solid fa-camera-rotate"></i><span>Ráfaga</span>
+                        </button>
+                    </div>
                 </div>
-                <textarea id="textareaArticulos" rows="2" readonly placeholder="Los códigos escaneados aparecerán aquí..." class="w-full border border-gray-200 rounded-lg p-2 text-xs bg-gray-100 text-gray-600 resize-none"></textarea>
+                <!-- Lista detallada de artículos con sus cajas físicas -->
+                <div id="containerListaArticulos" class="space-y-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50 text-xs">
+                    <span class="text-gray-400 italic">No hay artículos agregados todavía...</span>
+                </div>
             </div>
 
-            <!-- 5. Discrepancias General -->
+            <!-- 6. Discrepancias General -->
             <div class="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 space-y-3">
-                <label class="block text-xs font-bold text-emerald-800 uppercase">5. Gestión de Discrepancias</label>
+                <label class="block text-xs font-bold text-emerald-800 uppercase">6. Gestión de Discrepancias</label>
                 <select id="selectTipoDiscrepancia" onchange="toggleDiscrepanciaPanel()" class="w-full border border-emerald-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                     <option value="Sin discrepancia">Sin discrepancia</option>
                     <option value="Faltante">Faltante</option>
@@ -120,19 +137,22 @@
 
             <!-- Botones de Acción Global -->
             <div class="flex space-x-3 pt-2">
-                <button onclick="guardarRegistro()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md flex items-center justify-center space-x-2 transition">
-                    <i class="fa-solid fa-floppy-disk"></i><span>Guardar Registro</span>
+                <button id="btnGuardarRegistro" onclick="guardarRegistro()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md flex items-center justify-center space-x-2 transition">
+                    <i class="fa-solid fa-floppy-disk"></i><span id="btnGuardarText">Guardar Registro</span>
                 </button>
             </div>
         </section>
 
         <!-- Registered Records Section -->
         <section class="bg-white rounded-xl shadow-md p-5 space-y-3 border border-gray-100">
-            <div class="flex justify-between items-center border-b pb-2">
+            <div class="flex flex-wrap justify-between items-center border-b pb-2 gap-2">
                 <h3 class="font-bold text-gray-700 text-sm flex items-center">
                     <i class="fa-solid fa-table text-emerald-600 mr-2"></i> Registros Capturados
                 </h3>
-                <div class="space-x-2">
+                <div class="space-x-2 flex">
+                    <button onclick="vaciarTodosLosRegistrosPrompt()" class="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg shadow">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Vaciar todos los registros
+                    </button>
                     <button onclick="copyTableToClipboard()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg shadow">
                         <i class="fa-solid fa-copy mr-1"></i> Copiar Todo
                     </button>
@@ -146,16 +166,17 @@
                             <th class="p-2">#</th>
                             <th class="p-2">Fecha / Hora</th>
                             <th class="p-2">Emp.</th>
+                            <th class="p-2">PSQ</th>
                             <th class="p-2">Destino</th>
                             <th class="p-2">Cartón</th>
-                            <th class="p-2">Arts.</th>
+                            <th class="p-2">Arts. & Cajas</th>
                             <th class="p-2">Discrepancias Detalle</th>
-                            <th class="p-2 text-center">Acción</th>
+                            <th class="p-2 text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tableBodyRecords" class="divide-y divide-gray-100">
                         <tr>
-                            <td colspan="8" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td>
+                            <td colspan="9" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td>
                         </tr>
                     </tbody>
                 </table>
@@ -215,13 +236,14 @@
     <!-- JavaScript Logic -->
     <script>
         let registros = [];
-        let listaArticulos = [];
+        let listaArticulosDetalle = []; // Almacena objetos { codigo, cajas }
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
         let mediaStream = null;
         let scanInterval = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
+        let editingRecordId = null; // ID del registro en edición, null si es nuevo
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -262,7 +284,7 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
-        // Artículos manejo
+        // Artículos manejo con cajas físicas
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -272,21 +294,45 @@
 
         function addArticuloManual() {
             const val = document.getElementById('inputArticuloUnico').value.trim();
+            const cajasVal = parseInt(document.getElementById('inputCajasFisicas').value) || 1;
             if (val) {
-                listaArticulos.push(val);
+                listaArticulosDetalle.push({ codigo: val, cajas: cajasVal });
                 document.getElementById('inputArticuloUnico').value = '';
+                document.getElementById('inputCajasFisicas').value = '1';
                 updateArticulosView();
             }
         }
 
+        function removeArticuloDetalle(index) {
+            listaArticulosDetalle.splice(index, 1);
+            updateArticulosView();
+        }
+
         function clearArticulos() {
-            listaArticulos = [];
+            listaArticulosDetalle = [];
             updateArticulosView();
         }
 
         function updateArticulosView() {
-            document.getElementById('artCount').textContent = listaArticulos.length;
-            document.getElementById('textareaArticulos').value = listaArticulos.join(', ');
+            document.getElementById('artCount').textContent = listaArticulosDetalle.length;
+            const container = document.getElementById('containerListaArticulos');
+            
+            if (listaArticulosDetalle.length === 0) {
+                container.innerHTML = `<span class="text-gray-400 italic">No hay artículos agregados todavía...</span>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            listaArticulosDetalle.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center bg-white p-1.5 rounded border border-gray-200 shadow-sm';
+                row.innerHTML = `
+                    <span class="font-mono font-bold text-emerald-800">${item.codigo}</span>
+                    <span class="text-gray-600 bg-gray-100 px-2 py-0.5 rounded">Cajas: <strong class="text-gray-800">${item.cajas}</strong></span>
+                    <button onclick="removeArticuloDetalle(${idx})" class="text-red-500 hover:text-red-700 px-1"><i class="fa-solid fa-xmark"></i></button>
+                `;
+                container.appendChild(row);
+            });
         }
 
         // --- GESTIÓN CONTINUA DE DISCREPANCIAS MULTI-CÓDIGO ---
@@ -368,7 +414,6 @@
                     throw new Error("getUserMedia no soportado en este navegador.");
                 }
 
-                // Solicitar cámara trasera con resolución HD adaptativa para móviles
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: { 
                         facingMode: { ideal: "environment" },
@@ -409,10 +454,8 @@
             
             let multiFormatReader;
             try {
-                // Instanciación formal garantizada en ZXing v0.19.1
                 multiFormatReader = new ZXing.MultiFormatReader();
                 
-                // Configuración de formatos comerciales e industriales
                 const hints = new Map();
                 const formats = [
                     ZXing.BarcodeFormat.EAN_13,
@@ -437,7 +480,6 @@
 
             scanInterval = setInterval(() => {
                 if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-                    // Validar dimensiones reales del video antes de pintar el fotograma
                     if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
                         return;
                     }
@@ -453,14 +495,12 @@
                         const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
                         const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
                         
-                        // Uso correcto de decodeWithState para mantener el estado del lector continuo en fotogramas
                         const result = multiFormatReader.decodeWithState(binaryBitmap);
 
                         if (result) {
                             const codeText = result.getText();
                             const now = Date.now();
 
-                            // Protección anti-duplicados por 2 segundos
                             if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
                                 multiFormatReader.reset();
                                 return;
@@ -477,10 +517,8 @@
                             handleScannedValue(codeText);
                         }
                     } catch (e) {
-                        // Limpiar estado interno del lector en caso de no hallar coincidencia en el fotograma actual
                         try { multiFormatReader.reset(); } catch(err) {}
 
-                        // NotFoundException y ChecksumException son normales en cuadros vacíos. Se omiten de la consola.
                         if (!(e instanceof ZXing.NotFoundException) && !(e instanceof ZXing.ChecksumException) && !(e instanceof ZXing.FormatException)) {
                             console.warn("Aviso técnico en decodificación:", e);
                         }
@@ -525,7 +563,8 @@
             if (activeCameraTarget === 'carton') {
                 document.getElementById('inputCarton').value = code;
             } else if (activeCameraTarget === 'articulos_burst') {
-                listaArticulos.push(code);
+                const cajasVal = parseInt(document.getElementById('inputCajasFisicas').value) || 1;
+                listaArticulosDetalle.push({ codigo: code, cajas: cajasVal });
                 updateArticulosView();
             } else if (activeCameraTarget && activeCameraTarget.startsWith('disc_')) {
                 const idx = parseInt(activeCameraTarget.split('_')[1]);
@@ -536,9 +575,10 @@
             }
         }
 
-        // Guardar Registro
+        // Guardar o Actualizar Registro
         function guardarRegistro() {
             const empleado = document.getElementById('selectEmpleado').value;
+            const psq = document.getElementById('inputPsq').value.trim();
             const destino = document.getElementById('inputDestino').value.trim();
             const carton = document.getElementById('inputCarton').value.trim();
             const tipoDiscrepancia = document.getElementById('selectTipoDiscrepancia').value;
@@ -552,31 +592,101 @@
                 return;
             }
 
-            const ahora = new Date();
-            const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            if (editingRecordId !== null) {
+                // Actualizar registro existente conservando id y fechaHora originales
+                const index = registros.findIndex(r => r.id === editingRecordId);
+                if (index !== -1) {
+                    registros[index].empleado = empleado;
+                    registros[index].psq = psq || 'N/A';
+                    registros[index].destino = destino || 'N/A';
+                    registros[index].carton = carton;
+                    registros[index].articulosDetalle = JSON.parse(JSON.stringify(listaArticulosDetalle));
+                    registros[index].tipoDiscrepancia = tipoDiscrepancia;
+                    registros[index].discrepanciasDetalle = tipoDiscrepancia !== 'Sin discrepancia' ? JSON.parse(JSON.stringify(discrepancyRowsData)) : [];
+                }
+                Swal.fire({ icon: 'success', title: '¡Actualizado!', timer: 1200, showConfirmButton: false });
+                cancelarEdicion();
+            } else {
+                // Crear nuevo registro
+                const ahora = new Date();
+                const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-            const nuevoRegistro = {
-                id: Date.now(),
-                fechaHora: fechaHoraStr,
-                empleado,
-                destino: destino || 'N/A',
-                carton,
-                articulos: [...listaArticulos],
-                tipoDiscrepancia,
-                discrepanciasDetalle: tipoDiscrepancia !== 'Sin discrepancia' ? JSON.parse(JSON.stringify(discrepancyRowsData)) : []
-            };
+                const nuevoRegistro = {
+                    id: Date.now(),
+                    fechaHora: fechaHoraStr,
+                    empleado,
+                    psq: psq || 'N/A',
+                    destino: destino || 'N/A',
+                    carton,
+                    articulosDetalle: JSON.parse(JSON.stringify(listaArticulosDetalle)),
+                    tipoDiscrepancia,
+                    discrepanciasDetalle: tipoDiscrepancia !== 'Sin discrepancia' ? JSON.parse(JSON.stringify(discrepancyRowsData)) : []
+                };
 
-            registros.push(nuevoRegistro);
+                registros.push(nuevoRegistro);
+                Swal.fire({ icon: 'success', title: '¡Guardado!', timer: 1200, showConfirmButton: false });
+                resetForm();
+            }
+
             saveToStorage();
-            resetForm();
+        }
 
-            Swal.fire({ icon: 'success', title: '¡Guardado!', timer: 1200, showConfirmButton: false });
+        function editarRegistro(id) {
+            const registro = registros.find(r => r.id === id);
+            if (!registro) return;
+
+            editingRecordId = id;
+            document.getElementById('selectEmpleado').value = registro.empleado;
+            document.getElementById('inputPsq').value = registro.psq !== 'N/A' ? registro.psq : '';
+            document.getElementById('inputDestino').value = registro.destino !== 'N/A' ? registro.destino : '';
+            document.getElementById('inputCarton').value = registro.carton;
+            
+            // Cargar artículos con detalle de cajas (compatibilidad con registros antiguos si usaban string[])
+            if (registro.articulosDetalle && Array.isArray(registro.articulosDetalle)) {
+                listaArticulosDetalle = JSON.parse(JSON.stringify(registro.articulosDetalle));
+            } else if (registro.articulos && Array.isArray(registro.articulos)) {
+                listaArticulosDetalle = registro.articulos.map(code => ({ codigo: code, cajas: 1 }));
+            } else {
+                listaArticulosDetalle = [];
+            }
+            updateArticulosView();
+
+            document.getElementById('selectTipoDiscrepancia').value = registro.tipoDiscrepancia || 'Sin discrepancia';
+            toggleDiscrepanciaPanel();
+            
+            if (registro.discrepanciasDetalle && Array.isArray(registro.discrepanciasDetalle)) {
+                discrepancyRowsData = JSON.parse(JSON.stringify(registro.discrepanciasDetalle));
+                renderDiscrepancyRows();
+            }
+
+            // Cambiar modo visual del formulario a edición
+            document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-600 mr-2"></i> Editando Auditoría (#${id})`;
+            document.getElementById('btnGuardarText').textContent = "Actualizar Registro";
+            document.getElementById('btnGuardarRegistro').classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+            document.getElementById('btnGuardarRegistro').classList.add('bg-amber-600', 'hover:bg-amber-700');
+            document.getElementById('btnCancelarEdicion').classList.remove('hidden');
+            document.getElementById('btnCancelarEdicion').classList.add('flex');
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelarEdicion() {
+            editingRecordId = null;
+            document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-clipboard-list text-emerald-600 mr-2"></i> Captura de Auditoría`;
+            document.getElementById('btnGuardarText').textContent = "Guardar Registro";
+            document.getElementById('btnGuardarRegistro').classList.remove('bg-amber-600', 'hover:bg-amber-700');
+            document.getElementById('btnGuardarRegistro').classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+            document.getElementById('btnCancelarEdicion').classList.remove('flex');
+            document.getElementById('btnCancelarEdicion').classList.add('hidden');
+            resetForm();
         }
 
         function resetForm() {
+            document.getElementById('inputPsq').value = '';
             document.getElementById('inputDestino').value = '';
             document.getElementById('inputCarton').value = '';
-            listaArticulos = [];
+            document.getElementById('inputCajasFisicas').value = '1';
+            listaArticulosDetalle = [];
             discrepancyRowsData = [];
             updateArticulosView();
             document.getElementById('selectTipoDiscrepancia').value = 'Sin discrepancia';
@@ -584,8 +694,47 @@
         }
 
         function deleteRecord(id) {
-            registros = registros.filter(r => r.id !== id);
-            saveToStorage();
+            Swal.fire({
+                title: '¿Eliminar registro?',
+                text: "Esta acción no se puede deshacer.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    registros = registros.filter(r => r.id !== id);
+                    saveToStorage();
+                    Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1000, showConfirmButton: false });
+                }
+            });
+        }
+
+        function vaciarTodosLosRegistrosPrompt() {
+            if (registros.length === 0) {
+                Swal.fire('Atención', 'No hay registros guardados actualmente.', 'info');
+                return;
+            }
+
+            Swal.fire({
+                title: '¿Vaciar todos los registros?',
+                text: "Se eliminarán permanentemente todos los registros guardados en la tabla y en el almacenamiento local.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sí, vaciar todo',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    registros = [];
+                    saveToStorage();
+                    cancelarEdicion();
+                    Swal.fire({ icon: 'success', title: '¡Registros vaciados!', text: 'La aplicación está lista para nuevas auditorías.', timer: 1500, showConfirmButton: false });
+                }
+            });
         }
 
         function renderTable() {
@@ -593,13 +742,24 @@
             document.getElementById('badgeCount').textContent = `${registros.length} registros`;
 
             if (registros.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = '';
             registros.forEach((r, idx) => {
-                let discText = r.tipoDiscrepancia;
+                // Formatear artículos y cajas para la tabla
+                let artsDetalleArr = [];
+                if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
+                    artsDetalleArr = r.articulosDetalle;
+                } else if (r.articulos && Array.isArray(r.articulos)) {
+                    artsDetalleArr = r.articulos.map(c => ({ codigo: c, cajas: 1 }));
+                }
+                
+                let artsText = `${artsDetalleArr.length} arts`;
+                let artsTooltip = artsDetalleArr.map(item => `${item.codigo} (Cajas: ${item.cajas})`).join(', ');
+
+                let discText = r.tipoDiscrepancia || 'Sin discrepancia';
                 if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
                     discText += ': ' + r.discrepanciasDetalle.map(d => `[${d.tipo}: ${d.codigo || 'S/C'}, Cajas: ${d.cajas || 0}, Pzs: ${d.piezas || 0}]`).join(' | ');
                 }
@@ -610,27 +770,37 @@
                     <td class="p-2 font-medium">${idx + 1}</td>
                     <td class="p-2 text-gray-500 whitespace-nowrap">${r.fechaHora || 'N/A'}</td>
                     <td class="p-2">${r.empleado}</td>
+                    <td class="p-2 font-semibold text-slate-700">${r.psq || 'N/A'}</td>
                     <td class="p-2">${r.destino}</td>
                     <td class="p-2 font-mono text-emerald-700 font-bold">${r.carton}</td>
-                    <td class="p-2">${r.articulos.length} arts</td>
+                    <td class="p-2" title="${artsTooltip}"><span class="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-medium">${artsText}</span></td>
                     <td class="p-2 text-gray-600 max-w-xs truncate" title="${discText}">${discText}</td>
-                    <td class="p-2 text-center">
-                        <button onclick="deleteRecord(${r.id})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+                    <td class="p-2 text-center whitespace-nowrap space-x-1">
+                        <button onclick="editarRegistro(${r.id})" class="text-amber-600 hover:text-amber-800 p-1" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
+                        <button onclick="deleteRecord(${r.id})" class="text-red-500 hover:text-red-700 p-1" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        // Exportación
+        // Exportación con PSQ y Detalle de Cajas Físicas
         function exportToExcelModal() {
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
 
-            let csv = "ID\tFecha_Hora\tEmpleado\tDestino\tCarton\tTotal_Arts\tArticulos\tTipo_Discrepancia\tDetalle_Discrepancias\n";
+            let csv = "ID\tFecha_Hora\tEmpleado\tPSQ\tDestino\tCarton\tTotal_Arts\tArticulos_y_Cajas\tTipo_Discrepancia\tDetalle_Discrepancias\n";
             registros.forEach((r, idx) => {
+                let artsDetalleArr = [];
+                if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
+                    artsDetalleArr = r.articulosDetalle;
+                } else if (r.articulos && Array.isArray(r.articulos)) {
+                    artsDetalleArr = r.articulos.map(c => ({ codigo: c, cajas: 1 }));
+                }
+                let artsStr = artsDetalleArr.map(item => `${item.codigo} [Cajas:${item.cajas}]`).join('; ');
+
                 let detalle = (r.discrepanciasDetalle || []).map(d => `${d.tipo}:${d.codigo} Cajas:${d.cajas} Pzs:${d.piezas}`).join('; ');
-                csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t${r.destino}\t${r.carton}\t${r.articulos.length}\t"${r.articulos.join(', ')}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
+                csv += `${idx + 1}\t"${r.fechaHora || 'N/A'}"\t${r.empleado}\t"${r.psq || 'N/A'}"\t${r.destino}\t${r.carton}\t${artsDetalleArr.length}\t"${artsStr}"\t${r.tipoDiscrepancia}\t"${detalle}"\n`;
             });
 
             textarea.value = csv;
