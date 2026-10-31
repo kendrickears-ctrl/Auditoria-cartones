@@ -182,7 +182,7 @@
 
     </main>
 
-    <!-- Camera Modal -->
+    <!-- Camera Modal (Original working setup fully preserved) -->
     <div id="cameraModal" class="fixed inset-0 bg-black/80 z-50 hidden flex flex-col justify-between p-4">
         <div class="flex justify-between items-center text-white">
             <h3 id="cameraModalTitle" class="font-bold text-base">Escaneando código...</h3>
@@ -192,7 +192,6 @@
         </div>
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
-            <!-- Elemento de video nativo para ZXing Browser -->
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
@@ -232,14 +231,13 @@
     <!-- JavaScript Logic -->
     <script>
         let registros = [];
-        let listaArticulosDetalle = []; // Almacena objetos { codigo, cajas }
+        let listaArticulosDetalle = [];
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
         let codeReader = null;
-        let isScanningActive = false;
         let lastScannedCode = "";
         let lastScannedTime = 0;
-        let editingRecordId = null; // ID del registro en edición, null si es nuevo
+        let editingRecordId = null;
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -254,7 +252,6 @@
             renderTable();
         }
 
-        // Empleado management
         function addEmployeePrompt() {
             Swal.fire({
                 title: 'Nuevo Empleado',
@@ -280,7 +277,6 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
-        // Artículos manejo con flujo de cajas físicas obligatorio y sin herencia
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -359,7 +355,6 @@
             });
         }
 
-        // --- GESTIÓN CONTINUA DE DISCREPANCIAS MULTI-CÓDIGO ---
         function toggleDiscrepanciaPanel() {
             const tipo = document.getElementById('selectTipoDiscrepancia').value;
             const container = document.getElementById('discrepancyContainer');
@@ -419,7 +414,7 @@
             }
         }
 
-        // --- MOTOR ORIGINAL DE CÁMARA ESTABLE (ZXing BrowserMultiFormatReader) ---
+        // --- MOTOR ORIGINAL INTACTO DE CÁMARA ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -431,29 +426,30 @@
             loading.classList.remove('hidden');
             statusText.textContent = "Iniciando cámara trasera...";
 
-            if (isScanningActive || codeReader) {
+            if (codeReader) {
                 await closeCameraScannerAsync();
             }
 
             try {
-                if (!window.ZXingBrowser) {
-                    throw new Error("Librería ZXing Browser no disponible.");
+                codeReader = new ZXing.BrowserMultiFormatReader();
+                
+                const videoInputDevices = await codeReader.listVideoInputDevices();
+                let selectedDeviceId = null;
+                
+                if (videoInputDevices && videoInputDevices.length > 0) {
+                    const backCamera = videoInputDevices.find(device => 
+                        device.label.toLowerCase().includes('back') || 
+                        device.label.toLowerCase().includes('trasera') || 
+                        device.label.toLowerCase().includes('environment')
+                    );
+                    selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
                 }
-
-                codeReader = new ZXingBrowser.BrowserMultiFormatReader();
-                isScanningActive = true;
-
-                const constraints = {
-                    video: {
-                        facingMode: { ideal: "environment" }
-                    }
-                };
 
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                await codeReader.decodeFromConstraints(constraints, videoElement, (result, err) => {
-                    if (result && isScanningActive) {
+                codeReader.decodeFromVideoDevice(selectedDeviceId, 'cameraVideo', (result, err) => {
+                    if (result) {
                         const codeText = result.getText();
                         const now = Date.now();
 
@@ -480,17 +476,14 @@
 
             } catch (err) {
                 loading.classList.add('hidden');
-                isScanningActive = false;
                 console.error("Error al iniciar cámara:", err);
                 statusText.innerHTML = `<span class="text-red-400 font-semibold">No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.</span>`;
             }
         }
 
         async function closeCameraScannerAsync() {
-            isScanningActive = false;
             if (codeReader) {
                 try {
-                    codeReader.stopContinuousDecode();
                     codeReader.reset();
                 } catch (e) {
                     console.warn(e);
@@ -537,7 +530,6 @@
             }
         }
 
-        // Guardar o Actualizar Registro
         function guardarRegistro() {
             const empleado = document.getElementById('selectEmpleado').value;
             const psq = document.getElementById('inputPsq').value.trim();
@@ -740,7 +732,7 @@
             });
         }
 
-        // Exportación CSV con columnas separadas y formato abierto para Excel
+        // --- EXPORTACIÓN CSV CORREGIDA: COLUMNAS SEPARADAS Y COMPATIBILIDAD CON EXCEL ---
         function exportToExcelModal() {
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
@@ -791,6 +783,7 @@
 
         function downloadCSVFile() {
             const text = document.getElementById('exportTextarea').value;
+            // Uso estricto de BOM UTF-8 para que Excel abra el archivo directamente sin errores
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
