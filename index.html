@@ -449,7 +449,7 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO CORREGIDO Y ROBUSTO PARA ANDROID Y IPHONE ---
+        // --- MOTOR DE ESCANEO ROBUSTO Y OPTIMIZADO PARA ANDROID Y IPHONE ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -561,7 +561,6 @@
                             }
                         }
                     } catch (e) {
-                        // Capturamos silenciosamente NotFoundException o ChecksumException sin reiniciar agresivamente el lector
                         try {
                             if (multiFormatReader && typeof multiFormatReader.reset === 'function') {
                                 multiFormatReader.reset();
