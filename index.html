@@ -449,7 +449,7 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO ROBUSTO Y OPTIMIZADO PARA ANDROID Y IPHONE ---
+        // --- MOTOR DE ESCANEO DE ALTA VELOCIDAD (OPTIMIZADO Y COMPATIBLE) ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -517,6 +517,7 @@
             
             if (!multiFormatReader) return;
 
+            // Intervalo optimizado a 70ms para lograr lectura instantánea sin sobrecargar CPU en Android/iPhone
             scanInterval = setInterval(() => {
                 if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
                     if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
@@ -529,12 +530,26 @@
                     }
 
                     try {
-                        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                        // Recorte inteligente de la zona central para acelerar el procesamiento de decodificación
+                        const cropW = Math.floor(canvas.width * 0.8);
+                        const cropH = Math.floor(canvas.height * 0.8);
+                        const startX = Math.floor((canvas.width - cropW) / 2);
+                        const startY = Math.floor((canvas.height - cropH) / 2);
+
+                        ctx.drawImage(videoElement, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
+                        
+                        const originalW = canvas.width;
+                        const originalH = canvas.height;
+                        canvas.width = cropW;
+                        canvas.height = cropH;
 
                         const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
                         const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
                         
                         const result = multiFormatReader.decodeWithState(binaryBitmap);
+
+                        canvas.width = originalW;
+                        canvas.height = originalH;
 
                         if (result) {
                             const codeText = result.getText();
@@ -568,7 +583,7 @@
                         } catch(err) {}
                     }
                 }
-            }, 100);
+            }, 70);
         }
 
         async function closeCameraScannerAsync() {
@@ -651,11 +666,14 @@
                 cancelarEdicion();
             } else {
                 const ahora = new Date();
-                const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const fechaStr = ahora.toLocaleDateString();
+                const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
                 const nuevoRegistro = {
                     id: Date.now(),
-                    fechaHora: fechaHoraStr,
+                    fechaHora: fechaStr + ' ' + horaStr,
+                    fecha: fechaStr,
+                    hora: horaStr,
                     empleado,
                     psq: psq || 'N/A',
                     destino: destino || 'N/A',
@@ -834,7 +852,7 @@
             });
         }
 
-        // --- EXPORTACIÓN CSV CORREGIDA Y ROBUSTA SIN [object Object] ---
+        // --- EXPORTACIÓN CSV ESTRICTAMENTE CON 12 COLUMNAS Y FORMATO TABULAR ---
         function escapeCsvCell(val) {
             if (val === null || val === undefined) return '""';
             let str = String(val);
@@ -850,16 +868,25 @@
             const textarea = document.getElementById('exportTextarea');
 
             let csvRows = [];
+            
+            // Las exactamente 12 columnas solicitadas en orden estricto
             const headers = [
-                "ID", "Fecha_Hora", "Empleado", "PSQ", "Destino", "Carton", 
-                "Total_Arts", "Articulos_y_Cajas", "Tipo_Discrepancia_General",
-                "Faltante_Codigo", "Faltante_Cajas", "Faltante_Piezas",
-                "Sobrante_Codigo", "Sobrante_Cajas", "Sobrante_Piezas",
-                "Merma_Codigo", "Merma_Cajas", "Merma_Piezas"
+                "Destino",
+                "PSQ",
+                "Cartón",
+                "Número de empleado",
+                "Hora",
+                "Fecha",
+                "SKU",
+                "Cajas auditadas",
+                "Cajas con discrepancia",
+                "Sobrante",
+                "Faltante",
+                "Merma"
             ];
             csvRows.push(headers.map(escapeCsvCell).join(","));
 
-            registros.forEach((r, idx) => {
+            registros.forEach((r) => {
                 let artsDetalleArr = [];
                 if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
                     artsDetalleArr = r.articulosDetalle.map(item => {
@@ -876,57 +903,70 @@
                         return { codigo: String(c), cajas: 1 };
                     });
                 }
-                
-                let artsStr = artsDetalleArr.map(item => `${item.codigo} [Cajas:${item.cajas}]`).join('; ');
 
-                let f_cod = "", f_caj = "", f_pzs = "";
-                let s_cod = "", s_caj = "", s_pzs = "";
-                let m_cod = "", m_caj = "", m_pzs = "";
-
-                if (r.discrepanciasDetalle && Array.isArray(r.discrepanciasDetalle)) {
-                    r.discrepanciasDetalle.forEach(d => {
-                        const tipo = (d.tipo || "").toLowerCase();
-                        const dCode = (typeof d.codigo === 'object' && d.codigo !== null) ? (d.codigo.codigo || '') : (d.codigo || '');
-                        if (tipo.includes("faltante")) {
-                            f_cod = f_cod ? f_cod + "; " + dCode : dCode;
-                            f_caj = f_caj ? f_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
-                            f_pzs = f_pzs ? f_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
-                        } else if (tipo.includes("sobrante")) {
-                            s_cod = s_cod ? s_cod + "; " + dCode : dCode;
-                            s_caj = s_caj ? s_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
-                            s_pzs = s_pzs ? s_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
-                        } else if (tipo.includes("merma")) {
-                            m_cod = m_cod ? m_cod + "; " + dCode : dCode;
-                            m_caj = m_caj ? m_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
-                            m_pzs = m_pzs ? m_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
-                        }
-                    });
+                // Extraer fecha y hora asegurando compatibilidad con registros anteriores
+                let fechaVal = r.fecha || "";
+                let horaVal = r.hora || "";
+                if (!fechaVal && r.fechaHora) {
+                    const partes = r.fechaHora.split(' ');
+                    fechaVal = partes[0] || "";
+                    horaVal = partes.slice(1).join(' ') || "";
                 }
 
-                const cartonClean = (typeof r.carton === 'object' && r.carton !== null) ? (r.carton.codigo || '') : (r.carton || '');
+                const cartonVal = (typeof r.carton === 'object' && r.carton !== null) ? (r.carton.codigo || '') : (r.carton || '');
+                const destinoVal = r.destino || '';
+                const psqVal = r.psq || '';
+                const empleadoVal = r.empleado || '';
 
-                const rowData = [
-                    idx + 1,
-                    r.fechaHora || 'N/A',
-                    r.empleado || '',
-                    r.psq || 'N/A',
-                    r.destino || 'N/A',
-                    cartonClean,
-                    artsDetalleArr.length,
-                    artsStr,
-                    r.tipoDiscrepancia || 'Sin discrepancia',
-                    f_cod,
-                    f_caj,
-                    f_pzs,
-                    s_cod,
-                    s_caj,
-                    s_pzs,
-                    m_cod,
-                    m_caj,
-                    m_pzs
-                ];
+                // Si hay artículos escaneados, generamos una fila por cada artículo para mantener la integridad de las 12 columnas.
+                // Si no hay artículos, generamos al menos una fila base para el registro.
+                if (artsDetalleArr.length === 0) {
+                    artsDetalleArr.push({ codigo: '', cajas: 0 });
+                }
 
-                csvRows.push(rowData.map(escapeCsvCell).join(","));
+                artsDetalleArr.forEach(art => {
+                    let sobranteVal = "";
+                    let faltanteVal = "";
+                    let mermaVal = "";
+                    let cajasDiscVal = "";
+
+                    if (r.discrepanciasDetalle && Array.isArray(r.discrepanciasDetalle)) {
+                        r.discrepanciasDetalle.forEach(d => {
+                            const tipo = (d.tipo || "").toLowerCase();
+                            const dCode = (typeof d.codigo === 'object' && d.codigo !== null) ? (d.codigo.codigo || '') : (d.codigo || '');
+                            const cantidadStr = `${d.cajas || 0} caj / ${d.piezas || 0} pzs`;
+
+                            // Asignar según corresponda al SKU o de manera general
+                            if (tipo.includes("sobrante")) {
+                                sobranteVal = sobranteVal ? sobranteVal + "; " + (dCode ? `${dCode} (${cantidadStr})` : cantidadStr) : (dCode ? `${dCode} (${cantidadStr})` : cantidadStr);
+                                cajasDiscVal = cajasDiscVal ? cajasDiscVal + "; " + (d.cajas || 0) : (d.cajas || 0);
+                            } else if (tipo.includes("faltante")) {
+                                faltanteVal = faltanteVal ? faltanteVal + "; " + (dCode ? `${dCode} (${cantidadStr})` : cantidadStr) : (dCode ? `${dCode} (${cantidadStr})` : cantidadStr);
+                                cajasDiscVal = cajasDiscVal ? cajasDiscVal + "; " + (d.cajas || 0) : (d.cajas || 0);
+                            } else if (tipo.includes("merma")) {
+                                mermaVal = mermaVal ? mermaVal + "; " + (dCode ? `${dCode} (${cantidadStr})` : cantidadStr) : (dCode ? `${dCode} (${cantidadStr})` : cantidadStr);
+                                cajasDiscVal = cajasDiscVal ? cajasDiscVal + "; " + (d.cajas || 0) : (d.cajas || 0);
+                            }
+                        });
+                    }
+
+                    const rowData = [
+                        destinoVal,          // 1. Destino
+                        psqVal,              // 2. PSQ
+                        cartonVal,           // 3. Cartón
+                        empleadoVal,         // 4. Número de empleado
+                        horaVal,             // 5. Hora
+                        fechaVal,            // 6. Fecha
+                        art.codigo,          // 7. SKU
+                        art.cajas,           // 8. Cajas auditadas
+                        cajasDiscVal,        // 9. Cajas con discrepancia
+                        sobranteVal,         // 10. Sobrante
+                        faltanteVal,         // 11. Faltante
+                        mermaVal             // 12. Merma
+                    ];
+
+                    csvRows.push(rowData.map(escapeCsvCell).join(","));
+                });
             });
 
             const csvString = csvRows.join("\r\n");
@@ -952,7 +992,7 @@
                 return;
             }
 
-            // UTF-8 BOM (\uFEFF) para compatibilidad con acentos y Excel en Android
+            // UTF-8 con BOM (\uFEFF) para máxima compatibilidad con Excel en español (Android y PC)
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
