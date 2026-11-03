@@ -246,6 +246,7 @@
         let lastScannedCode = "";
         let lastScannedTime = 0;
         let editingRecordId = null; // ID del registro en edición, null si es nuevo
+        let multiFormatReader = null; // Instancia global para ZXing
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -253,6 +254,29 @@
                 try { registros = JSON.parse(saved); } catch(e) { registros = []; }
             }
             renderTable();
+
+            // Inicializar lector ZXing de forma segura
+            try {
+                multiFormatReader = new ZXing.MultiFormatReader();
+                const hints = new Map();
+                const formats = [
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.CODE_93,
+                    ZXing.BarcodeFormat.ITF,
+                    ZXing.BarcodeFormat.QR_CODE,
+                    ZXing.BarcodeFormat.DATA_MATRIX
+                ];
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                multiFormatReader.setHints(hints);
+            } catch(e) {
+                console.error("Error al inicializar MultiFormatReader:", e);
+            }
         };
 
         function saveToStorage() {
@@ -425,7 +449,7 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO RESTAURADO Y OPTIMIZADO PARA ANDROID Y IPHONE ---
+        // --- MOTOR DE ESCANEO CORREGIDO Y ROBUSTO PARA ANDROID Y IPHONE ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -435,7 +459,7 @@
 
             modal.classList.remove('hidden');
             loading.classList.remove('hidden');
-            statusText.textContent = "Iniciando cámara y activando enfoque...";
+            statusText.textContent = "Iniciando cámara...";
 
             await closeCameraScannerAsync();
 
@@ -446,22 +470,14 @@
 
                 const constraints = {
                     video: {
-                        facingMode: { exact: "environment" },
+                        facingMode: { ideal: "environment" },
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     },
                     audio: false
                 };
 
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                } catch (errCam) {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { ideal: "environment" } },
-                        audio: false
-                    });
-                }
-
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = mediaStream;
                 await videoElement.play().catch(e => console.log("Play warning:", e));
 
@@ -476,7 +492,7 @@
                 
                 let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS.";
                 if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
+                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración.";
                 } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
                     errorMsg = "No se encontró una cámara trasera disponible.";
                 }
@@ -499,31 +515,7 @@
             const canvas = document.getElementById('hiddenCanvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             
-            let multiFormatReader;
-            try {
-                multiFormatReader = new ZXing.MultiFormatReader();
-                
-                const hints = new Map();
-                const formats = [
-                    ZXing.BarcodeFormat.EAN_13,
-                    ZXing.BarcodeFormat.EAN_8,
-                    ZXing.BarcodeFormat.UPC_A,
-                    ZXing.BarcodeFormat.UPC_E,
-                    ZXing.BarcodeFormat.CODE_128,
-                    ZXing.BarcodeFormat.CODE_39,
-                    ZXing.BarcodeFormat.CODE_93,
-                    ZXing.BarcodeFormat.ITF,
-                    ZXing.BarcodeFormat.QR_CODE,
-                    ZXing.BarcodeFormat.DATA_MATRIX
-                ];
-                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-                multiFormatReader.setHints(hints);
-
-            } catch (e) {
-                console.error("Error al configurar MultiFormatReader:", e);
-                return;
-            }
+            if (!multiFormatReader) return;
 
             scanInterval = setInterval(() => {
                 if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
@@ -569,10 +561,15 @@
                             }
                         }
                     } catch (e) {
-                        try { multiFormatReader.reset(); } catch(err) {}
+                        // Capturamos silenciosamente NotFoundException o ChecksumException sin reiniciar agresivamente el lector
+                        try {
+                            if (multiFormatReader && typeof multiFormatReader.reset === 'function') {
+                                multiFormatReader.reset();
+                            }
+                        } catch(err) {}
                     }
                 }
-            }, 80);
+            }, 100);
         }
 
         async function closeCameraScannerAsync() {
@@ -690,7 +687,7 @@
             if (registro.articulosDetalle && Array.isArray(registro.articulosDetalle)) {
                 listaArticulosDetalle = JSON.parse(JSON.stringify(registro.articulosDetalle));
             } else if (registro.articulos && Array.isArray(registro.articulos)) {
-                listaArticulosDetalle = registro.articulos.map(code => ({ codigo: code, cajas: 1 }));
+                listaArticulosDetalle = registro.articulos.map(c => ({ codigo: (typeof c === 'object' && c !== null ? (c.codigo || '') : String(c)), cajas: (typeof c === 'object' && c !== null ? (c.cajas || 1) : 1) }));
             } else {
                 listaArticulosDetalle = [];
             }
@@ -793,9 +790,19 @@
             registros.forEach((r, idx) => {
                 let artsDetalleArr = [];
                 if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
-                    artsDetalleArr = r.articulosDetalle;
+                    artsDetalleArr = r.articulosDetalle.map(item => {
+                        if (typeof item === 'object' && item !== null) {
+                            return { codigo: item.codigo || '', cajas: item.cajas || 1 };
+                        }
+                        return { codigo: String(item), cajas: 1 };
+                    });
                 } else if (r.articulos && Array.isArray(r.articulos)) {
-                    artsDetalleArr = r.articulos.map(c => ({ codigo: c, cajas: 1 }));
+                    artsDetalleArr = r.articulos.map(c => {
+                        if (typeof c === 'object' && c !== null) {
+                            return { codigo: c.codigo || '', cajas: c.cajas || 1 };
+                        }
+                        return { codigo: String(c), cajas: 1 };
+                    });
                 }
                 
                 let artsText = `${artsDetalleArr.length} arts`;
@@ -806,6 +813,8 @@
                     discText += ': ' + r.discrepanciasDetalle.map(d => `[${d.tipo}: ${d.codigo || 'S/C'}, Cajas: ${d.cajas || 0}, Pzs: ${d.piezas || 0}]`).join(' | ');
                 }
 
+                const cartonVal = (typeof r.carton === 'object' && r.carton !== null) ? (r.carton.codigo || JSON.stringify(r.carton)) : (r.carton || 'N/A');
+
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-gray-50 border-b';
                 tr.innerHTML = `
@@ -814,7 +823,7 @@
                     <td class="p-2">${r.empleado}</td>
                     <td class="p-2 font-semibold text-slate-700">${r.psq || 'N/A'}</td>
                     <td class="p-2">${r.destino}</td>
-                    <td class="p-2 font-mono text-emerald-700 font-bold">${r.carton}</td>
+                    <td class="p-2 font-mono text-emerald-700 font-bold">${cartonVal}</td>
                     <td class="p-2" title="${artsTooltip}"><span class="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-medium">${artsText}</span></td>
                     <td class="p-2 text-gray-600 max-w-xs truncate" title="${discText}">${discText}</td>
                     <td class="p-2 text-center whitespace-nowrap space-x-1">
@@ -826,11 +835,15 @@
             });
         }
 
-        // --- EXPORTACIÓN CSV CORREGIDA Y COMPATIBLE CON EXCEL EN ANDROID ---
+        // --- EXPORTACIÓN CSV CORREGIDA Y ROBUSTA SIN [object Object] ---
         function escapeCsvCell(val) {
             if (val === null || val === undefined) return '""';
-            const str = String(val).replace(/"/g, '""');
-            return `"${str}"`;
+            let str = String(val);
+            if (str === "[object Object]") {
+                str = "";
+            }
+            const escaped = str.replace(/"/g, '""');
+            return `"${escaped}"`;
         }
 
         function exportToExcelModal() {
@@ -850,9 +863,19 @@
             registros.forEach((r, idx) => {
                 let artsDetalleArr = [];
                 if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
-                    artsDetalleArr = r.articulosDetalle;
+                    artsDetalleArr = r.articulosDetalle.map(item => {
+                        if (typeof item === 'object' && item !== null) {
+                            return { codigo: item.codigo || '', cajas: item.cajas || 1 };
+                        }
+                        return { codigo: String(item), cajas: 1 };
+                    });
                 } else if (r.articulos && Array.isArray(r.articulos)) {
-                    artsDetalleArr = r.articulos.map(c => ({ codigo: c, cajas: 1 }));
+                    artsDetalleArr = r.articulos.map(c => {
+                        if (typeof c === 'object' && c !== null) {
+                            return { codigo: c.codigo || '', cajas: c.cajas || 1 };
+                        }
+                        return { codigo: String(c), cajas: 1 };
+                    });
                 }
                 
                 let artsStr = artsDetalleArr.map(item => `${item.codigo} [Cajas:${item.cajas}]`).join('; ');
@@ -864,29 +887,32 @@
                 if (r.discrepanciasDetalle && Array.isArray(r.discrepanciasDetalle)) {
                     r.discrepanciasDetalle.forEach(d => {
                         const tipo = (d.tipo || "").toLowerCase();
+                        const dCode = (typeof d.codigo === 'object' && d.codigo !== null) ? (d.codigo.codigo || '') : (d.codigo || '');
                         if (tipo.includes("faltante")) {
-                            f_cod = f_cod ? f_cod + "; " + d.codigo : d.codigo;
+                            f_cod = f_cod ? f_cod + "; " + dCode : dCode;
                             f_caj = f_caj ? f_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
                             f_pzs = f_pzs ? f_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
                         } else if (tipo.includes("sobrante")) {
-                            s_cod = s_cod ? s_cod + "; " + d.codigo : d.codigo;
+                            s_cod = s_cod ? s_cod + "; " + dCode : dCode;
                             s_caj = s_caj ? s_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
                             s_pzs = s_pzs ? s_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
                         } else if (tipo.includes("merma")) {
-                            m_cod = m_cod ? m_cod + "; " + d.codigo : d.codigo;
+                            m_cod = m_cod ? m_cod + "; " + dCode : dCode;
                             m_caj = m_caj ? m_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
                             m_pzs = m_pzs ? m_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
                         }
                     });
                 }
 
+                const cartonClean = (typeof r.carton === 'object' && r.carton !== null) ? (r.carton.codigo || '') : (r.carton || '');
+
                 const rowData = [
                     idx + 1,
                     r.fechaHora || 'N/A',
-                    r.empleado,
+                    r.empleado || '',
                     r.psq || 'N/A',
                     r.destino || 'N/A',
-                    r.carton,
+                    cartonClean,
                     artsDetalleArr.length,
                     artsStr,
                     r.tipoDiscrepancia || 'Sin discrepancia',
@@ -927,6 +953,7 @@
                 return;
             }
 
+            // UTF-8 BOM (\uFEFF) para compatibilidad con acentos y Excel en Android
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
