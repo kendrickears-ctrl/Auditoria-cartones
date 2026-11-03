@@ -182,22 +182,29 @@
 
     </main>
 
-    <!-- Camera Modal (Original working setup fully preserved) -->
+    <!-- Camera Modal -->
     <div id="cameraModal" class="fixed inset-0 bg-black/80 z-50 hidden flex flex-col justify-between p-4">
         <div class="flex justify-between items-center text-white">
             <h3 id="cameraModalTitle" class="font-bold text-base">Escaneando código...</h3>
-            <button onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
-                <i class="fa-solid fa-xmark mr-1"></i> Cerrar
-            </button>
+            <div class="space-x-2">
+                <button onclick="reiniciarCamaraScanner()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold" title="Reiniciar si se congela">
+                    <i class="fa-solid fa-rotate-right mr-1"></i> Reiniciar
+                </button>
+                <button onclick="closeCameraScanner()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
+                    <i class="fa-solid fa-xmark mr-1"></i> Cerrar
+                </button>
+            </div>
         </div>
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
+            <!-- Canvas oculto para procesamiento de fotogramas optimizado -->
+            <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
-                <p class="text-sm">Iniciando cámara...</p>
+                <p class="text-sm">Iniciando cámara y enfoque...</p>
             </div>
-            <div class="absolute inset-12 border-2 border-dashed border-emerald-400/60 rounded-lg pointer-events-none"></div>
+            <div class="absolute inset-16 border-2 border-dashed border-emerald-400/60 rounded-lg pointer-events-none"></div>
         </div>
 
         <div class="max-w-md mx-auto w-full text-center space-y-2">
@@ -231,13 +238,14 @@
     <!-- JavaScript Logic -->
     <script>
         let registros = [];
-        let listaArticulosDetalle = [];
+        let listaArticulosDetalle = []; // Almacena objetos { codigo, cajas }
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
-        let codeReader = null;
+        let mediaStream = null;
+        let scanInterval = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
-        let editingRecordId = null;
+        let editingRecordId = null; // ID del registro en edición, null si es nuevo
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -252,6 +260,7 @@
             renderTable();
         }
 
+        // Empleado management
         function addEmployeePrompt() {
             Swal.fire({
                 title: 'Nuevo Empleado',
@@ -277,6 +286,7 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
+        // Artículos manejo con flujo de cajas físicas obligatorio y sin herencia
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -355,6 +365,7 @@
             });
         }
 
+        // --- GESTIÓN CONTINUA DE DISCREPANCIAS MULTI-CÓDIGO ---
         function toggleDiscrepanciaPanel() {
             const tipo = document.getElementById('selectTipoDiscrepancia').value;
             const container = document.getElementById('discrepancyContainer');
@@ -375,7 +386,7 @@
         function addDiscrepancyRow() {
             const defaultType = document.getElementById('selectTipoDiscrepancia').value;
             const tipoFila = (defaultType === 'Sin discrepancia' || defaultType === 'Faltante y Sobrante') ? 'Faltante' : defaultType;
-            discrepancyRowsData.push({ tipo: tipoFila, codigo: '', cajas: '', piezas: '', comentario: '' });
+            discrepancyRowsData.push({ tipo: tipoFila, codigo: '', cajas: '', piezas: '' });
             renderDiscrepancyRows();
         }
 
@@ -402,7 +413,6 @@
                     <button onclick="openCameraScanner('disc_${index}')" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs"><i class="fa-solid fa-camera"></i></button>
                     <input type="number" placeholder="Cajas" value="${item.cajas || ''}" oninput="updateDiscField(${index}, 'cajas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
                     <input type="number" placeholder="Piezas" value="${item.piezas || ''}" oninput="updateDiscField(${index}, 'piezas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
-                    <input type="text" placeholder="Comentario" value="${item.comentario || ''}" oninput="updateDiscField(${index}, 'comentario', this.value)" class="flex-1 min-w-[120px] border rounded p-1.5 text-xs outline-none">
                     <button onclick="removeDiscrepancyRow(${index})" class="text-red-500 hover:text-red-700 px-1 text-sm"><i class="fa-solid fa-trash-can"></i></button>
                 `;
                 list.appendChild(row);
@@ -415,7 +425,7 @@
             }
         }
 
-        // --- MOTOR ORIGINAL INTACTO DE CÁMARA ---
+        // --- MOTOR DE ESCANEO RESTAURADO Y OPTIMIZADO PARA ANDROID Y IPHONE ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -425,79 +435,161 @@
 
             modal.classList.remove('hidden');
             loading.classList.remove('hidden');
-            statusText.textContent = "Iniciando cámara trasera...";
+            statusText.textContent = "Iniciando cámara y activando enfoque...";
 
-            if (codeReader) {
-                await closeCameraScannerAsync();
-            }
+            await closeCameraScannerAsync();
 
             try {
-                codeReader = new ZXing.BrowserMultiFormatReader();
-                
-                const videoInputDevices = await codeReader.listVideoInputDevices();
-                let selectedDeviceId = null;
-                
-                if (videoInputDevices && videoInputDevices.length > 0) {
-                    const backCamera = videoInputDevices.find(device => 
-                        device.label.toLowerCase().includes('back') || 
-                        device.label.toLowerCase().includes('trasera') || 
-                        device.label.toLowerCase().includes('environment')
-                    );
-                    selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error("getUserMedia no soportado en este navegador.");
                 }
+
+                const constraints = {
+                    video: {
+                        facingMode: { exact: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                };
+
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (errCam) {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { ideal: "environment" } },
+                        audio: false
+                    });
+                }
+
+                videoElement.srcObject = mediaStream;
+                await videoElement.play().catch(e => console.log("Play warning:", e));
 
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                codeReader.decodeFromVideoDevice(selectedDeviceId, 'cameraVideo', (result, err) => {
-                    if (result) {
-                        const codeText = result.getText();
-                        const now = Date.now();
-
-                        if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
-                            return;
-                        }
-
-                        lastScannedCode = codeText;
-                        lastScannedTime = now;
-
-                        if (navigator.vibrate) {
-                            navigator.vibrate(100);
-                        }
-
-                        closeCameraScanner();
-
-                        if (activeCameraTarget === 'articulos_burst') {
-                            solicitarCantidadCajasParaArticulo(codeText);
-                        } else {
-                            handleScannedValue(codeText);
-                        }
-                    }
-                });
+                startOptimizedCanvasDecodingLoop(videoElement);
 
             } catch (err) {
                 loading.classList.add('hidden');
                 console.error("Error al iniciar cámara:", err);
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.</span>`;
+                
+                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS.";
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración de su navegador.";
+                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+                    errorMsg = "No se encontró una cámara trasera disponible.";
+                }
+                
+                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
             }
         }
 
-        async function closeCameraScannerAsync() {
-            if (codeReader) {
-                try {
-                    codeReader.reset();
-                } catch (e) {
-                    console.warn(e);
+        async function reiniciarCamaraScanner() {
+            const targetActual = activeCameraTarget;
+            await closeCameraScannerAsync();
+            setTimeout(() => {
+                if (targetActual) {
+                    openCameraScanner(targetActual);
                 }
-                codeReader = null;
+            }, 300);
+        }
+
+        function startOptimizedCanvasDecodingLoop(videoElement) {
+            const canvas = document.getElementById('hiddenCanvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            
+            let multiFormatReader;
+            try {
+                multiFormatReader = new ZXing.MultiFormatReader();
+                
+                const hints = new Map();
+                const formats = [
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.CODE_93,
+                    ZXing.BarcodeFormat.ITF,
+                    ZXing.BarcodeFormat.QR_CODE,
+                    ZXing.BarcodeFormat.DATA_MATRIX
+                ];
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                multiFormatReader.setHints(hints);
+
+            } catch (e) {
+                console.error("Error al configurar MultiFormatReader:", e);
+                return;
+            }
+
+            scanInterval = setInterval(() => {
+                if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                    if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+                        return;
+                    }
+
+                    if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
+                        canvas.width = videoElement.videoWidth;
+                        canvas.height = videoElement.videoHeight;
+                    }
+
+                    try {
+                        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+                        const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+                        const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+                        
+                        const result = multiFormatReader.decodeWithState(binaryBitmap);
+
+                        if (result) {
+                            const codeText = result.getText();
+                            const now = Date.now();
+
+                            if (codeText === lastScannedCode && (now - lastScannedTime < 1500)) {
+                                multiFormatReader.reset();
+                                return;
+                            }
+
+                            lastScannedCode = codeText;
+                            lastScannedTime = now;
+
+                            if (navigator.vibrate) {
+                                navigator.vibrate(100);
+                            }
+
+                            if (activeCameraTarget === 'articulos_burst') {
+                                closeCameraScanner();
+                                solicitarCantidadCajasParaArticulo(codeText);
+                            } else {
+                                closeCameraScanner();
+                                handleScannedValue(codeText);
+                            }
+                        }
+                    } catch (e) {
+                        try { multiFormatReader.reset(); } catch(err) {}
+                    }
+                }
+            }, 80);
+        }
+
+        async function closeCameraScannerAsync() {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
             }
 
             const videoElement = document.getElementById('cameraVideo');
-            if (videoElement && videoElement.srcObject) {
-                const stream = videoElement.srcObject;
-                const tracks = stream.getTracks();
-                tracks.forEach(track => track.stop());
+            if (videoElement) {
+                videoElement.pause();
                 videoElement.srcObject = null;
+            }
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
             }
         }
 
@@ -531,6 +623,7 @@
             }
         }
 
+        // Guardar o Actualizar Registro
         function guardarRegistro() {
             const empleado = document.getElementById('selectEmpleado').value;
             const psq = document.getElementById('inputPsq').value.trim();
@@ -562,14 +655,10 @@
                 cancelarEdicion();
             } else {
                 const ahora = new Date();
-                const fechaStr = ahora.toLocaleDateString();
-                const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                const fechaHoraStr = fechaStr + ' ' + horaStr;
+                const fechaHoraStr = ahora.toLocaleDateString() + ' ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
                 const nuevoRegistro = {
                     id: Date.now(),
-                    fecha: fechaStr,
-                    hora: horaStr,
                     fechaHora: fechaHoraStr,
                     empleado,
                     psq: psq || 'N/A',
@@ -737,14 +826,27 @@
             });
         }
 
-        // --- EXPORTACIÓN CSV PROFESIONAL (COMPATIBLE CON EXCEL EN ESPAÑOL, PUNTO Y COMA, SKU TEXTO Y COLUMNAS SEPARADAS) ---
+        // --- EXPORTACIÓN CSV CORREGIDA Y COMPATIBLE CON EXCEL EN ANDROID ---
+        function escapeCsvCell(val) {
+            if (val === null || val === undefined) return '""';
+            const str = String(val).replace(/"/g, '""');
+            return `"${str}"`;
+        }
+
         function exportToExcelModal() {
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
 
-            // Encabezados solicitados separados por punto y coma (;)
-            let csv = "Orden;SKU;Cajas solicitadas;Cajas auditadas;Faltantes;Piezas faltantes;Sobrantes;Piezas sobrantes;Mermas;Piezas con merma;Códigos solicitados;Códigos contabilizados;Diferencia;Comentario de discrepancia;Tarimas contadas;Fecha;Hora;Empleado\n";
-            
+            let csvRows = [];
+            const headers = [
+                "ID", "Fecha_Hora", "Empleado", "PSQ", "Destino", "Carton", 
+                "Total_Arts", "Articulos_y_Cajas", "Tipo_Discrepancia_General",
+                "Faltante_Codigo", "Faltante_Cajas", "Faltante_Piezas",
+                "Sobrante_Codigo", "Sobrante_Cajas", "Sobrante_Piezas",
+                "Merma_Codigo", "Merma_Cajas", "Merma_Piezas"
+            ];
+            csvRows.push(headers.map(escapeCsvCell).join(","));
+
             registros.forEach((r, idx) => {
                 let artsDetalleArr = [];
                 if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
@@ -752,49 +854,58 @@
                 } else if (r.articulos && Array.isArray(r.articulos)) {
                     artsDetalleArr = r.articulos.map(c => ({ codigo: c, cajas: 1 }));
                 }
+                
+                let artsStr = artsDetalleArr.map(item => `${item.codigo} [Cajas:${item.cajas}]`).join('; ');
 
-                const ordenVal = idx + 1;
-                const psqVal = `="${r.psq || 'N/A'}"`;
-                const fechaVal = `"${r.fecha || (r.fechaHora ? r.fechaHora.split(' ')[0] : 'N/A')}"`;
-                const horaVal = `"${r.hora || (r.fechaHora ? r.fechaHora.split(' ').slice(1).join(' ') : 'N/A')}"`;
-                const empleadoVal = `"${r.empleado || ''}"`;
-                const tarimasVal = 1; // Tarima estándar por registro de cartón
+                let f_cod = "", f_caj = "", f_pzs = "";
+                let s_cod = "", s_caj = "", s_pzs = "";
+                let m_cod = "", m_caj = "", m_pzs = "";
 
-                if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
+                if (r.discrepanciasDetalle && Array.isArray(r.discrepanciasDetalle)) {
                     r.discrepanciasDetalle.forEach(d => {
-                        const skuVal = `="${d.codigo || ''}"`;
-                        const cajasAuditadas = d.cajas ? parseInt(d.cajas) : 0;
-                        const piezasVal = d.piezas ? parseInt(d.piezas) : 0;
-                        const comentarioVal = `"${(d.comentario || '').replace(/"/g, '""')}"`;
-
-                        let fCajas = 0, fPzs = 0, sCajas = 0, sPzs = 0, mCajas = 0, mPzs = 0;
-                        if (d.tipo === 'Faltante') { fCajas = cajasAuditadas; fPzs = piezasVal; }
-                        else if (d.tipo === 'Sobrante') { sCajas = cajasAuditadas; sPzs = piezasVal; }
-                        else if (d.tipo === 'Merma') { mCajas = cajasAuditadas; mPzs = piezasVal; }
-
-                        const codigosSolicitados = artsDetalleArr.length;
-                        const codigosContabilizados = codigosSolicitados + (sCajas - fCajas);
-                        const diferencia = sCajas - fCajas;
-
-                        csv += `${ordenVal};${skuVal};${codigosSolicitados};${cajasAuditadas};${fCajas};${fPzs};${sCajas};${sPzs};${mCajas};${mPzs};${codigosSolicitados};${codigosContabilizados};${diferencia};${comentarioVal};${tarimasVal};${fechaVal};${horaVal};${empleadoVal}\n`;
+                        const tipo = (d.tipo || "").toLowerCase();
+                        if (tipo.includes("faltante")) {
+                            f_cod = f_cod ? f_cod + "; " + d.codigo : d.codigo;
+                            f_caj = f_caj ? f_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
+                            f_pzs = f_pzs ? f_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
+                        } else if (tipo.includes("sobrante")) {
+                            s_cod = s_cod ? s_cod + "; " + d.codigo : d.codigo;
+                            s_caj = s_caj ? s_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
+                            s_pzs = s_pzs ? s_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
+                        } else if (tipo.includes("merma")) {
+                            m_cod = m_cod ? m_cod + "; " + d.codigo : d.codigo;
+                            m_caj = m_caj ? m_caj + "; " + (d.cajas || 0) : (d.cajas || 0);
+                            m_pzs = m_pzs ? m_pzs + "; " + (d.piezas || 0) : (d.piezas || 0);
+                        }
                     });
-                } else {
-                    // Si no hay discrepancias detalladas pero hay artículos escaneados
-                    if (artsDetalleArr.length > 0) {
-                        artsDetalleArr.forEach(art => {
-                            const skuVal = `="${art.codigo}"`;
-                            const cajasAuditadas = art.cajas || 0;
-                            csv += `${ordenVal};${skuVal};${cajasAuditadas};${cajasAuditadas};0;0;0;0;0;0;${cajasAuditadas};${cajasAuditadas};0;"";${tarimasVal};${fechaVal};${horaVal};${empleadoVal}\n`;
-                        });
-                    } else {
-                        // Registro general sin artículos detallados
-                        const skuVal = `="${r.carton}"`;
-                        csv += `${ordenVal};${skuVal};0;0;0;0;0;0;0;0;0;0;0;"";${tarimasVal};${fechaVal};${horaVal};${empleadoVal}\n`;
-                    }
                 }
+
+                const rowData = [
+                    idx + 1,
+                    r.fechaHora || 'N/A',
+                    r.empleado,
+                    r.psq || 'N/A',
+                    r.destino || 'N/A',
+                    r.carton,
+                    artsDetalleArr.length,
+                    artsStr,
+                    r.tipoDiscrepancia || 'Sin discrepancia',
+                    f_cod,
+                    f_caj,
+                    f_pzs,
+                    s_cod,
+                    s_caj,
+                    s_pzs,
+                    m_cod,
+                    m_caj,
+                    m_pzs
+                ];
+
+                csvRows.push(rowData.map(escapeCsvCell).join(","));
             });
 
-            textarea.value = csv;
+            const csvString = csvRows.join("\r\n");
+            textarea.value = csvString;
             modal.classList.remove('hidden');
         }
 
@@ -811,15 +922,26 @@
 
         function downloadCSVFile() {
             const text = document.getElementById('exportTextarea').value;
-            // Uso estricto de BOM UTF-8 (\uFEFF) y punto y coma (;) para compatibilidad total con Excel en español
+            if (!text.trim()) {
+                Swal.fire('Atención', 'No hay datos para exportar.', 'warning');
+                return;
+            }
+
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `Auditoria_Cartones_${new Date().toISOString().slice(0,10)}.csv`;
+            
             document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
+            
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 500);
+
+            Swal.fire({ icon: 'success', title: '¡Archivo descargado!', text: 'El archivo CSV se descargó correctamente.', timer: 1500, showConfirmButton: false });
         }
 
         function copyTableToClipboard() {
