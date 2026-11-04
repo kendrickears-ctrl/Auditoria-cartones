@@ -446,7 +446,7 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO RÁPIDO CONSERVA PERMISOS Y DISPOSITIVOS ---
+        // --- MOTOR DE ESCANEO ORIGINAL RESTAURADO (Fluido y estable) ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -456,25 +456,34 @@
 
             modal.classList.remove('hidden');
             loading.classList.remove('hidden');
-            statusText.textContent = "Iniciando cámara...";
+            statusText.textContent = "Iniciando cámara y enfoque...";
 
             await closeCameraScannerAsync();
 
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("getUserMedia no soportado.");
+                    throw new Error("getUserMedia no soportado en este navegador.");
                 }
 
                 const constraints = {
                     video: {
                         facingMode: { ideal: "environment" },
                         width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        height: { ideal: 720 },
+                        advanced: [{ focusMode: "continuous" }]
                     },
                     audio: false
                 };
 
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (constraintErr) {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { ideal: "environment" } },
+                        audio: false
+                    });
+                }
+
                 videoElement.srcObject = mediaStream;
                 await videoElement.play().catch(e => console.log("Play warning:", e));
 
@@ -487,7 +496,7 @@
                 loading.classList.add('hidden');
                 console.error("Error al iniciar cámara:", err);
                 
-                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS.";
+                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS o use la entrada manual.";
                 if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
                     errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración.";
                 } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
@@ -512,7 +521,29 @@
             const canvas = document.getElementById('hiddenCanvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             
-            if (!multiFormatReader) return;
+            let multiFormatReader;
+            try {
+                multiFormatReader = new ZXing.MultiFormatReader();
+                const hints = new Map();
+                const formats = [
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.CODE_93,
+                    ZXing.BarcodeFormat.ITF,
+                    ZXing.BarcodeFormat.QR_CODE,
+                    ZXing.BarcodeFormat.DATA_MATRIX
+                ];
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                multiFormatReader.setHints(hints);
+            } catch (e) {
+                console.error("Error al configurar MultiFormatReader:", e);
+                return;
+            }
 
             scanInterval = setInterval(() => {
                 if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
@@ -524,31 +555,31 @@
                     }
 
                     try {
-                        const cropW = Math.floor(canvas.width * 0.8);
-                        const cropH = Math.floor(canvas.height * 0.8);
-                        const startX = Math.floor((canvas.width - cropW) / 2);
-                        const startY = Math.floor((canvas.height - cropH) / 2);
+                        const cropWidth = Math.floor(canvas.width * 0.85);
+                        const cropHeight = Math.floor(canvas.height * 0.85);
+                        const startX = Math.floor((canvas.width - cropWidth) / 2);
+                        const startY = Math.floor((canvas.height - cropHeight) / 2);
 
-                        ctx.drawImage(videoElement, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
+                        ctx.drawImage(videoElement, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
                         
-                        const originalW = canvas.width;
-                        const originalH = canvas.height;
-                        canvas.width = cropW;
-                        canvas.height = cropH;
+                        const tempCanvasW = canvas.width;
+                        const tempCanvasH = canvas.height;
+                        canvas.width = cropWidth;
+                        canvas.height = cropHeight;
 
                         const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
                         const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
                         
                         const result = multiFormatReader.decodeWithState(binaryBitmap);
 
-                        canvas.width = originalW;
-                        canvas.height = originalH;
+                        canvas.width = tempCanvasW;
+                        canvas.height = tempCanvasH;
 
                         if (result) {
                             const codeText = result.getText();
                             const now = Date.now();
 
-                            if (codeText === lastScannedCode && (now - lastScannedTime < 1500)) {
+                            if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
                                 multiFormatReader.reset();
                                 return;
                             }
@@ -567,14 +598,10 @@
                             }
                         }
                     } catch (e) {
-                        try {
-                            if (multiFormatReader && typeof multiFormatReader.reset === 'function') {
-                                multiFormatReader.reset();
-                            }
-                        } catch(err) {}
+                        try { multiFormatReader.reset(); } catch(err) {}
                     }
                 }
-            }, 70);
+            }, 120);
         }
 
         async function closeCameraScannerAsync() {
@@ -843,17 +870,17 @@
             });
         }
 
-        // --- EXPORTACIÓN CSV CORREGIDA CON PUNTO Y COMA (;) Y FORMATO DE TEXTO PROTEGIDO ="VALOR" ---
+        // --- EXPORTACIÓN CSV CON COLUMNAS SEPARADAS Y ORDEN SOLICITADO ---
         function formatCsvField(val) {
-            if (val === null || val === undefined) return '""';
+            if (val === null || val === undefined || val === "") return '""';
             let str = String(val).trim();
             if (str === "[object Object]") str = "";
             
-            // Si es un código numérico largo (SKU, Cartón, Empleado), se encierra como ="CÓDIGO" para forzar texto en Excel
+            // Protección de códigos numéricos largos para que Excel en Android los mantenga como texto
             if (/^\d{5,}$/.test(str)) {
-                return `="` + str + `"`;
+                return `='` + str + `'`;
             }
-            
+
             const escaped = str.replace(/"/g, '""');
             return `"${escaped}"`;
         }
@@ -864,20 +891,26 @@
 
             let csvRows = [];
             
-            // Usamos Punto y Coma (;) como separador nativo para Excel en español
+            // Orden exacto de las 12 columnas principales + desglose de discrepancias en columnas separadas (Código, Cajas, Piezas)
             const headers = [
                 "Destino",
                 "PSQ",
                 "Cartón",
-                "Número de empleado",
-                "Hora",
+                "Código",
+                "Cajas",
+                "Total discrepancia",
+                "Sobrante - Código",
+                "Sobrante - Cajas",
+                "Sobrante - Piezas",
+                "Faltante - Código",
+                "Faltante - Cajas",
+                "Faltante - Piezas",
+                "Merma - Código",
+                "Merma - Cajas",
+                "Merma - Piezas",
                 "Fecha",
-                "SKU",
-                "Cajas auditadas",
-                "Cajas con discrepancia",
-                "Sobrante",
-                "Faltante",
-                "Merma"
+                "Hora",
+                "Auditor"
             ];
             csvRows.push(headers.map(formatCsvField).join(";"));
 
@@ -917,26 +950,31 @@
                 }
 
                 artsDetalleArr.forEach(art => {
-                    let sobranteVal = "";
-                    let faltanteVal = "";
-                    let mermaVal = "";
-                    let cajasDiscVal = "";
+                    let sob_cod = "", sob_caj = "", sob_pzs = "";
+                    let fal_cod = "", fal_caj = "", fal_pzs = "";
+                    let mer_cod = "", mer_caj = "", mer_pzs = "";
+                    let totalDiscCount = 0;
 
                     if (r.discrepanciasDetalle && Array.isArray(r.discrepanciasDetalle)) {
+                        totalDiscCount = r.discrepanciasDetalle.length;
                         r.discrepanciasDetalle.forEach(d => {
                             const tipo = (d.tipo || "").toLowerCase();
                             const dCode = (typeof d.codigo === 'object' && d.codigo !== null) ? (d.codigo.codigo || '') : (d.codigo || '');
-                            const cantidadStr = `${d.cajas || 0} caj / ${d.piezas || 0} pzs`;
+                            const dCajas = d.cajas || 0;
+                            const dPiezas = d.piezas || 0;
 
                             if (tipo.includes("sobrante")) {
-                                sobranteVal = sobranteVal ? sobranteVal + "; " + (dCode ? `${dCode} (${cantidadStr})` : cantidadStr) : (dCode ? `${dCode} (${cantidadStr})` : cantidadStr);
-                                cajasDiscVal = cajasDiscVal ? cajasDiscVal + "; " + (d.cajas || 0) : (d.cajas || 0);
+                                sob_cod = sob_cod ? sob_cod + "; " + dCode : dCode;
+                                sob_caj = sob_caj ? sob_caj + "; " + dCajas : dCajas;
+                                sob_pzs = sob_pzs ? sob_pzs + "; " + dPiezas : dPiezas;
                             } else if (tipo.includes("faltante")) {
-                                faltanteVal = faltanteVal ? faltanteVal + "; " + (dCode ? `${dCode} (${cantidadStr})` : cantidadStr) : (dCode ? `${dCode} (${cantidadStr})` : cantidadStr);
-                                cajasDiscVal = cajasDiscVal ? cajasDiscVal + "; " + (d.cajas || 0) : (d.cajas || 0);
+                                fal_cod = fal_cod ? fal_cod + "; " + dCode : dCode;
+                                fal_caj = fal_caj ? fal_caj + "; " + dCajas : dCajas;
+                                fal_pzs = fal_pzs ? fal_pzs + "; " + dPiezas : dPiezas;
                             } else if (tipo.includes("merma")) {
-                                mermaVal = mermaVal ? mermaVal + "; " + (dCode ? `${dCode} (${cantidadStr})` : cantidadStr) : (dCode ? `${dCode} (${cantidadStr})` : cantidadStr);
-                                cajasDiscVal = cajasDiscVal ? cajasDiscVal + "; " + (d.cajas || 0) : (d.cajas || 0);
+                                mer_cod = mer_cod ? mer_cod + "; " + dCode : dCode;
+                                mer_caj = mer_caj ? mer_caj + "; " + dCajas : dCajas;
+                                mer_pzs = mer_pzs ? mer_pzs + "; " + dPiezas : dPiezas;
                             }
                         });
                     }
@@ -945,15 +983,21 @@
                         destinoVal,          // 1. Destino
                         psqVal,              // 2. PSQ
                         cartonVal,           // 3. Cartón
-                        empleadoVal,         // 4. Número de empleado
-                        horaVal,             // 5. Hora
-                        fechaVal,            // 6. Fecha
-                        art.codigo,          // 7. SKU
-                        art.cajas,           // 8. Cajas auditadas
-                        cajasDiscVal,        // 9. Cajas con discrepancia
-                        sobranteVal,         // 10. Sobrante
-                        faltanteVal,         // 11. Faltante
-                        mermaVal             // 12. Merma
+                        art.codigo,          // 4. Código (SKU)
+                        art.cajas,           // 5. Cajas
+                        totalDiscCount,      // 6. Total discrepancia
+                        sob_cod,             // 7. Sobrante - Código
+                        sob_caj,             // 8. Sobrante - Cajas
+                        sob_pzs,             // 9. Sobrante - Piezas
+                        fal_cod,             // 10. Faltante - Código
+                        fal_caj,             // 11. Faltante - Cajas
+                        fal_pzs,             // 12. Faltante - Piezas
+                        mer_cod,             // 13. Merma - Código
+                        mer_caj,             // 14. Merma - Cajas
+                        mer_pzs,             // 15. Merma - Piezas
+                        fechaVal,            // 16. Fecha
+                        horaVal,             // 17. Hora
+                        empleadoVal          // 18. Auditor (Número de empleado)
                     ];
 
                     csvRows.push(rowData.map(formatCsvField).join(";"));
@@ -983,9 +1027,9 @@
                 return;
             }
 
-            // Encabezado explícito de separador para Excel (sep=;) + UTF-8 BOM (\uFEFF)
-            const content = "sep=;\r\n\uFEFF" + text;
-            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            // sep=; garantiza que Excel en Android e iOS separe las columnas automáticamente al abrir
+            const fileContent = "sep=;\r\n\uFEFF" + text;
+            const blob = new Blob([fileContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
