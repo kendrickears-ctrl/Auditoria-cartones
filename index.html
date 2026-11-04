@@ -198,7 +198,6 @@
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
-            <!-- Canvas oculto para procesamiento de fotogramas optimizado -->
             <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
@@ -238,15 +237,15 @@
     <!-- JavaScript Logic -->
     <script>
         let registros = [];
-        let listaArticulosDetalle = []; // Almacena objetos { codigo, cajas }
+        let listaArticulosDetalle = []; // Objetos { codigo, cajas }
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
         let mediaStream = null;
         let scanInterval = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
-        let editingRecordId = null; // ID del registro en edición, null si es nuevo
-        let multiFormatReader = null; // Instancia global para ZXing
+        let editingRecordId = null;
+        let multiFormatReader = null;
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -255,7 +254,6 @@
             }
             renderTable();
 
-            // Inicializar lector ZXing de forma segura
             try {
                 multiFormatReader = new ZXing.MultiFormatReader();
                 const hints = new Map();
@@ -310,7 +308,6 @@
             select.innerHTML = '<option value="">Seleccione empleado...</option>';
         }
 
-        // Artículos manejo con flujo de cajas físicas obligatorio y sin herencia
         function handleArticuloKeypress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -389,7 +386,7 @@
             });
         }
 
-        // --- GESTIÓN CONTINUA DE DISCREPANCIAS MULTI-CÓDIGO ---
+        // --- GESTIÓN CONTINUA DE DISCREPANCIAS ---
         function toggleDiscrepanciaPanel() {
             const tipo = document.getElementById('selectTipoDiscrepancia').value;
             const container = document.getElementById('discrepancyContainer');
@@ -449,7 +446,7 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO DE ALTA VELOCIDAD (OPTIMIZADO Y COMPATIBLE) ---
+        // --- MOTOR DE ESCANEO RÁPIDO CONSERVA PERMISOS Y DISPOSITIVOS ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
             const modal = document.getElementById('cameraModal');
@@ -465,7 +462,7 @@
 
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("getUserMedia no soportado en este navegador.");
+                    throw new Error("getUserMedia no soportado.");
                 }
 
                 const constraints = {
@@ -517,12 +514,9 @@
             
             if (!multiFormatReader) return;
 
-            // Intervalo optimizado a 70ms para lograr lectura instantánea sin sobrecargar CPU en Android/iPhone
             scanInterval = setInterval(() => {
                 if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-                    if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
-                        return;
-                    }
+                    if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) return;
 
                     if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
                         canvas.width = videoElement.videoWidth;
@@ -530,7 +524,6 @@
                     }
 
                     try {
-                        // Recorte inteligente de la zona central para acelerar el procesamiento de decodificación
                         const cropW = Math.floor(canvas.width * 0.8);
                         const cropH = Math.floor(canvas.height * 0.8);
                         const startX = Math.floor((canvas.width - cropW) / 2);
@@ -563,9 +556,7 @@
                             lastScannedCode = codeText;
                             lastScannedTime = now;
 
-                            if (navigator.vibrate) {
-                                navigator.vibrate(100);
-                            }
+                            if (navigator.vibrate) navigator.vibrate(100);
 
                             if (activeCameraTarget === 'articulos_burst') {
                                 closeCameraScanner();
@@ -651,6 +642,10 @@
                 return;
             }
 
+            const ahora = new Date();
+            const fechaStr = ahora.toLocaleDateString();
+            const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
             if (editingRecordId !== null) {
                 const index = registros.findIndex(r => r.id === editingRecordId);
                 if (index !== -1) {
@@ -665,10 +660,6 @@
                 Swal.fire({ icon: 'success', title: '¡Actualizado!', timer: 1200, showConfirmButton: false });
                 cancelarEdicion();
             } else {
-                const ahora = new Date();
-                const fechaStr = ahora.toLocaleDateString();
-                const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
                 const nuevoRegistro = {
                     id: Date.now(),
                     fechaHora: fechaStr + ' ' + horaStr,
@@ -852,13 +843,17 @@
             });
         }
 
-        // --- EXPORTACIÓN CSV ESTRICTAMENTE CON 12 COLUMNAS Y FORMATO TABULAR ---
-        function escapeCsvCell(val) {
+        // --- EXPORTACIÓN CSV CORREGIDA CON PUNTO Y COMA (;) Y FORMATO DE TEXTO PROTEGIDO ="VALOR" ---
+        function formatCsvField(val) {
             if (val === null || val === undefined) return '""';
-            let str = String(val);
-            if (str === "[object Object]") {
-                str = "";
+            let str = String(val).trim();
+            if (str === "[object Object]") str = "";
+            
+            // Si es un código numérico largo (SKU, Cartón, Empleado), se encierra como ="CÓDIGO" para forzar texto en Excel
+            if (/^\d{5,}$/.test(str)) {
+                return `="` + str + `"`;
             }
+            
             const escaped = str.replace(/"/g, '""');
             return `"${escaped}"`;
         }
@@ -869,7 +864,7 @@
 
             let csvRows = [];
             
-            // Las exactamente 12 columnas solicitadas en orden estricto
+            // Usamos Punto y Coma (;) como separador nativo para Excel en español
             const headers = [
                 "Destino",
                 "PSQ",
@@ -884,7 +879,7 @@
                 "Faltante",
                 "Merma"
             ];
-            csvRows.push(headers.map(escapeCsvCell).join(","));
+            csvRows.push(headers.map(formatCsvField).join(";"));
 
             registros.forEach((r) => {
                 let artsDetalleArr = [];
@@ -904,7 +899,6 @@
                     });
                 }
 
-                // Extraer fecha y hora asegurando compatibilidad con registros anteriores
                 let fechaVal = r.fecha || "";
                 let horaVal = r.hora || "";
                 if (!fechaVal && r.fechaHora) {
@@ -918,8 +912,6 @@
                 const psqVal = r.psq || '';
                 const empleadoVal = r.empleado || '';
 
-                // Si hay artículos escaneados, generamos una fila por cada artículo para mantener la integridad de las 12 columnas.
-                // Si no hay artículos, generamos al menos una fila base para el registro.
                 if (artsDetalleArr.length === 0) {
                     artsDetalleArr.push({ codigo: '', cajas: 0 });
                 }
@@ -936,7 +928,6 @@
                             const dCode = (typeof d.codigo === 'object' && d.codigo !== null) ? (d.codigo.codigo || '') : (d.codigo || '');
                             const cantidadStr = `${d.cajas || 0} caj / ${d.piezas || 0} pzs`;
 
-                            // Asignar según corresponda al SKU o de manera general
                             if (tipo.includes("sobrante")) {
                                 sobranteVal = sobranteVal ? sobranteVal + "; " + (dCode ? `${dCode} (${cantidadStr})` : cantidadStr) : (dCode ? `${dCode} (${cantidadStr})` : cantidadStr);
                                 cajasDiscVal = cajasDiscVal ? cajasDiscVal + "; " + (d.cajas || 0) : (d.cajas || 0);
@@ -965,7 +956,7 @@
                         mermaVal             // 12. Merma
                     ];
 
-                    csvRows.push(rowData.map(escapeCsvCell).join(","));
+                    csvRows.push(rowData.map(formatCsvField).join(";"));
                 });
             });
 
@@ -992,8 +983,9 @@
                 return;
             }
 
-            // UTF-8 con BOM (\uFEFF) para máxima compatibilidad con Excel en español (Android y PC)
-            const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
+            // Encabezado explícito de separador para Excel (sep=;) + UTF-8 BOM (\uFEFF)
+            const content = "sep=;\r\n\uFEFF" + text;
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
