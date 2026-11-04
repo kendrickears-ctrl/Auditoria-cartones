@@ -10,6 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <!-- ZXing Library UMD v0.19.1 -->
     <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+    <!-- jsPDF para generación de reportes en PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <style>
         body { background-color: #f3f4f6; }
     </style>
@@ -26,7 +29,7 @@
             <div class="flex items-center space-x-3">
                 <span id="badgeCount" class="bg-emerald-700 text-xs px-2.5 py-1 rounded-full font-medium">0 registros</span>
                 <button onclick="exportToExcelModal()" class="bg-emerald-700 hover:bg-emerald-800 text-white text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1 shadow transition">
-                    <i class="fa-solid fa-file-excel"></i><span>Exportar</span>
+                    <i class="fa-solid fa-file-arrow-down"></i><span>Exportar / Reportes</span>
                 </button>
             </div>
         </div>
@@ -123,7 +126,7 @@
                     <div class="flex justify-between items-center">
                         <span class="text-xs font-semibold text-emerald-900">Listado de Errores / Discrepancias</span>
                         <button onclick="addDiscrepancyRow()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md shadow font-bold flex items-center space-x-1">
-                            <i class="fa-solid fa-plus"></i><span>Agregar Otro Código</span>
+                            <i class="fa-solid fa-plus"></i><span>Agregar Detalle</span>
                         </button>
                     </div>
                     <div id="discrepancyRowsList" class="space-y-2">
@@ -148,10 +151,10 @@
                 </h3>
                 <div class="space-x-2 flex">
                     <button onclick="vaciarTodosLosRegistrosPrompt()" class="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg shadow">
-                        <i class="fa-solid fa-trash-can mr-1"></i> Vaciar todos los registros
+                        <i class="fa-solid fa-trash-can mr-1"></i> Vaciar todos
                     </button>
-                    <button onclick="copyTableToClipboard()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg shadow">
-                        <i class="fa-solid fa-copy mr-1"></i> Copiar Todo
+                    <button onclick="exportToExcelModal()" class="bg-emerald-700 hover:bg-emerald-800 text-white text-xs px-3 py-1.5 rounded-lg shadow">
+                        <i class="fa-solid fa-download mr-1"></i> Exportar
                     </button>
                 </div>
             </div>
@@ -198,7 +201,7 @@
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
-            <!-- Canvas auxiliar nativo para procesamiento continuo de fotogramas -->
+            <!-- Canvas oculto optimizado para velocidad -->
             <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
@@ -216,20 +219,24 @@
         </div>
     </div>
 
-    <!-- Export Modal -->
+    <!-- Export Modal (CSV & PDF) -->
     <div id="exportModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
             <h3 class="font-bold text-gray-800 text-base border-b pb-2 flex justify-between items-center">
-                <span>Exportar Datos (Excel / CSV)</span>
+                <span>Centro de Exportación y Respaldo</span>
                 <button onclick="closeExportModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
             </h3>
-            <textarea id="exportTextarea" rows="6" readonly class="w-full border rounded-lg p-2 text-xs bg-gray-50 font-mono"></textarea>
-            <div class="flex space-x-2">
-                <button onclick="copyExportText()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold shadow">
-                    <i class="fa-solid fa-copy mr-1"></i> Copiar al Portapapeles
+            <p class="text-xs text-gray-600">Puedes descargar tu reporte en formato <strong>CSV</strong> (para Excel) o respaldo en <strong>PDF</strong> con la misma estructura exacta.</p>
+            <textarea id="exportTextarea" rows="4" readonly class="w-full border rounded-lg p-2 text-xs bg-gray-50 font-mono" placeholder="Vista previa CSV..."></textarea>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button onclick="downloadPDFFile()" class="bg-red-600 hover:bg-red-700 text-white py-2.5 px-3 rounded-lg text-xs font-bold shadow flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-file-pdf"></i><span>Descargar PDF</span>
                 </button>
-                <button onclick="downloadCSVFile()" class="bg-slate-700 hover:bg-slate-800 text-white py-2 px-4 rounded-lg text-xs font-bold shadow">
-                    Descargar .CSV
+                <button onclick="downloadCSVFile()" class="bg-slate-700 hover:bg-slate-800 text-white py-2.5 px-3 rounded-lg text-xs font-bold shadow flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-file-csv"></i><span>Descargar CSV</span>
+                </button>
+                <button onclick="copyExportText()" class="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-lg text-xs font-bold shadow flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-copy"></i><span>Copiar Texto</span>
                 </button>
             </div>
         </div>
@@ -238,15 +245,15 @@
     <!-- JavaScript Logic -->
     <script>
         let registros = [];
-        let listaArticulosDetalle = [];
+        let listaArticulosDetalle = []; 
         let discrepancyRowsData = [];
         let activeCameraTarget = null;
         let mediaStream = null;
         let scanInterval = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
-        let isProcessingScan = false; // Bandera de control temporal para evitar doble lectura instantánea sin bloquear el ciclo
-        let editingRecordId = null;
+        let editingRecordId = null; 
+        let multiFormatReader = null; 
 
         window.onload = function() {
             const saved = localStorage.getItem('auditoria_cartones_data');
@@ -254,6 +261,28 @@
                 try { registros = JSON.parse(saved); } catch(e) { registros = []; }
             }
             renderTable();
+
+            try {
+                multiFormatReader = new ZXing.MultiFormatReader();
+                const hints = new Map();
+                const formats = [
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.CODE_93,
+                    ZXing.BarcodeFormat.ITF,
+                    ZXing.BarcodeFormat.QR_CODE,
+                    ZXing.BarcodeFormat.DATA_MATRIX
+                ];
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                multiFormatReader.setHints(hints);
+            } catch(e) {
+                console.error("Error al inicializar MultiFormatReader:", e);
+            }
         };
 
         function saveToStorage() {
@@ -327,41 +356,52 @@
                 if (result.isConfirmed && result.value) {
                     const cantidadCajas = parseInt(result.value);
                     listaArticulosDetalle.push({ codigo: codigoArticulo, cajas: cantidadCajas });
-                    updateArticulosView();
+                    renderListaArticulos();
+                    if (activeCameraTarget === 'articulos_burst') {
+                        setTimeout(() => { startScanningLoop(); }, 300);
+                    }
+                } else {
+                    if (activeCameraTarget === 'articulos_burst') {
+                        setTimeout(() => { startScanningLoop(); }, 300);
+                    }
                 }
             });
         }
 
-        function removeArticuloDetalle(index) {
+        function renderListaArticulos() {
+            const container = document.getElementById('containerListaArticulos');
+            const countSpan = document.getElementById('artCount');
+            countSpan.textContent = listaArticulosDetalle.length;
+
+            if (listaArticulosDetalle.length === 0) {
+                container.innerHTML = '<span class="text-gray-400 italic">No hay artículos agregados todavía...</span>';
+                return;
+            }
+
+            let html = '';
+            listaArticulosDetalle.forEach((item, index) => {
+                html += `
+                    <div class="flex justify-between items-center bg-white p-2 rounded border border-gray-200 shadow-sm">
+                        <div class="flex items-center space-x-2 overflow-hidden">
+                            <span class="font-bold text-gray-500">${index + 1}.</span>
+                            <span class="font-mono font-semibold text-gray-800 truncate">${item.codigo}</span>
+                            <span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">${item.cajas} caja(s)</span>
+                        </div>
+                        <button onclick="eliminarArticuloDetalle(${index})" class="text-red-500 hover:text-red-700 px-1 text-xs"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function eliminarArticuloDetalle(index) {
             listaArticulosDetalle.splice(index, 1);
-            updateArticulosView();
+            renderListaArticulos();
         }
 
         function clearArticulos() {
             listaArticulosDetalle = [];
-            updateArticulosView();
-        }
-
-        function updateArticulosView() {
-            document.getElementById('artCount').textContent = listaArticulosDetalle.length;
-            const container = document.getElementById('containerListaArticulos');
-            
-            if (listaArticulosDetalle.length === 0) {
-                container.innerHTML = `<span class="text-gray-400 italic">No hay artículos agregados todavía...</span>`;
-                return;
-            }
-
-            container.innerHTML = '';
-            listaArticulosDetalle.forEach((item, idx) => {
-                const row = document.createElement('div');
-                row.className = 'flex justify-between items-center bg-white p-1.5 rounded border border-gray-200 shadow-sm';
-                row.innerHTML = `
-                    <span class="font-mono font-bold text-emerald-800">${item.codigo}</span>
-                    <span class="text-gray-600 bg-gray-100 px-2 py-0.5 rounded">Cajas: <strong class="text-gray-800">${item.cajas}</strong></span>
-                    <button onclick="removeArticuloDetalle(${idx})" class="text-red-500 hover:text-red-700 px-1"><i class="fa-solid fa-xmark"></i></button>
-                `;
-                container.appendChild(row);
-            });
+            renderListaArticulos();
         }
 
         function toggleDiscrepanciaPanel() {
@@ -370,21 +410,17 @@
             if (tipo === 'Sin discrepancia') {
                 container.classList.add('hidden');
                 discrepancyRowsData = [];
-                renderDiscrepancyRows();
+                document.getElementById('discrepancyRowsList').innerHTML = '';
             } else {
                 container.classList.remove('hidden');
                 if (discrepancyRowsData.length === 0) {
                     addDiscrepancyRow();
-                } else {
-                    renderDiscrepancyRows();
                 }
             }
         }
 
         function addDiscrepancyRow() {
-            const defaultType = document.getElementById('selectTipoDiscrepancia').value;
-            const tipoFila = (defaultType === 'Sin discrepancia' || defaultType === 'Faltante y Sobrante') ? 'Faltante' : defaultType;
-            discrepancyRowsData.push({ tipo: tipoFila, codigo: '', cajas: '', piezas: '' });
+            discrepancyRowsData.push({ tipoError: 'Faltante', cajasError: 1, piezasError: 0 });
             renderDiscrepancyRows();
         }
 
@@ -394,279 +430,200 @@
         }
 
         function renderDiscrepancyRows() {
-            const list = document.getElementById('discrepancyRowsList');
-            list.innerHTML = '';
+            const listContainer = document.getElementById('discrepancyRowsList');
+            if (discrepancyRowsData.length === 0) {
+                listContainer.innerHTML = '<span class="text-gray-400 italic text-xs">No hay discrepancias agregadas.</span>';
+                return;
+            }
 
-            discrepancyRowsData.forEach((item, index) => {
-                const row = document.createElement('div');
-                row.className = 'flex flex-wrap md:flex-nowrap items-center gap-2 bg-white p-2.5 rounded-lg border border-emerald-200 shadow-sm';
-                
-                row.innerHTML = `
-                    <select onchange="updateDiscField(${index}, 'tipo', this.value)" class="border rounded p-1.5 text-xs bg-gray-50 outline-none font-semibold text-emerald-800">
-                        <option value="Faltante" ${item.tipo === 'Faltante' ? 'selected' : ''}>Faltante</option>
-                        <option value="Sobrante" ${item.tipo === 'Sobrante' ? 'selected' : ''}>Sobrante</option>
-                        <option value="Merma" ${item.tipo === 'Merma' ? 'selected' : ''}>Merma</option>
-                    </select>
-                    <input type="text" placeholder="SKU / Código" value="${item.codigo || ''}" oninput="updateDiscField(${index}, 'codigo', this.value)" class="flex-1 min-w-[120px] border rounded p-1.5 text-xs outline-none">
-                    <button onclick="openCameraScanner('disc_${index}')" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs"><i class="fa-solid fa-camera"></i></button>
-                    <input type="number" placeholder="Cajas" value="${item.cajas || ''}" oninput="updateDiscField(${index}, 'cajas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
-                    <input type="number" placeholder="Piezas" value="${item.piezas || ''}" oninput="updateDiscField(${index}, 'piezas', this.value)" class="w-16 border rounded p-1.5 text-xs outline-none">
-                    <button onclick="removeDiscrepancyRow(${index})" class="text-red-500 hover:text-red-700 px-1 text-sm"><i class="fa-solid fa-trash-can"></i></button>
+            let html = '';
+            discrepancyRowsData.forEach((row, index) => {
+                html += `
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white p-2.5 rounded-lg border border-emerald-200 shadow-sm items-center text-xs">
+                        <div class="sm:col-span-5">
+                            <select onchange="updateDiscrepancyField(${index}, 'tipoError', this.value)" class="w-full border rounded p-1.5 bg-gray-50 outline-none">
+                                <option value="Faltante" ${row.tipoError === 'Faltante' ? 'selected' : ''}>Faltante</option>
+                                <option value="Sobrante" ${row.tipoError === 'Sobrante' ? 'selected' : ''}>Sobrante</option>
+                                <option value="Merma" ${row.tipoError === 'Merma' ? 'selected' : ''}>Merma</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-3">
+                            <input type="number" min="0" value="${row.cajasError}" placeholder="Cajas" oninput="updateDiscrepancyField(${index}, 'cajasError', this.value)" class="w-full border rounded p-1.5 bg-gray-50 outline-none" title="Cajas de discrepancia">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <input type="number" min="0" value="${row.piezasError}" placeholder="Piezas" oninput="updateDiscrepancyField(${index}, 'piezasError', this.value)" class="w-full border rounded p-1.5 bg-gray-50 outline-none" title="Piezas sueltas de discrepancia">
+                        </div>
+                        <div class="sm:col-span-1 text-center">
+                            <button onclick="removeDiscrepancyRow(${index})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </div>
                 `;
-                list.appendChild(row);
             });
+            listContainer.innerHTML = html;
         }
 
-        function updateDiscField(index, field, value) {
-            if (discrepancyRowsData[index]) {
+        function updateDiscrepancyField(index, field, value) {
+            if (field === 'cajasError' || field === 'piezasError') {
+                discrepancyRowsData[index][field] = parseInt(value) || 0;
+            } else {
                 discrepancyRowsData[index][field] = value;
             }
         }
 
-        // --- MOTOR DE ESCANEO CON BUCLE CONTINUO Y LIBERACIÓN DE BLOQUEO ---
-        async function openCameraScanner(target) {
+        // ==========================================
+        // CÁMARA ULTRA RÁPIDA
+        // ==========================================
+        function openCameraScanner(target) {
             activeCameraTarget = target;
-            isProcessingScan = false; // Reiniciar bandera de bloqueo al abrir
             const modal = document.getElementById('cameraModal');
-            const videoElement = document.getElementById('cameraVideo');
+            const title = document.getElementById('cameraModalTitle');
             const loading = document.getElementById('cameraLoading');
-            const statusText = document.getElementById('cameraStatusText');
+            
+            if (target === 'carton') title.textContent = 'Escaneando Código de Cartón...';
+            else if (target === 'articulos_burst') title.textContent = 'Ráfaga de Artículos (Escanea varios)...';
 
             modal.classList.remove('hidden');
             loading.classList.remove('hidden');
-            statusText.textContent = "Iniciando cámara y enfoque...";
+            document.getElementById('manualCameraFallback').value = '';
 
-            await closeCameraScannerAsync();
+            startCameraStream();
+        }
 
-            try {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error("getUserMedia no soportado.");
-                }
+        function startCameraStream() {
+            const video = document.getElementById('cameraVideo');
+            const loading = document.getElementById('cameraLoading');
 
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 const constraints = {
                     video: {
-                        facingMode: { ideal: "environment" },
+                        facingMode: "environment",
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
-                    },
-                    audio: false
+                    }
                 };
 
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                videoElement.srcObject = mediaStream;
-                await videoElement.play().catch(e => console.log("Play warning:", e));
-
-                loading.classList.add('hidden');
-                statusText.textContent = "Apunta la cámara al código de barras...";
-
-                startContinuousDecodingLoop(videoElement);
-
-            } catch (err) {
-                loading.classList.add('hidden');
-                console.error("Error al iniciar cámara:", err);
-                
-                let errorMsg = "No se pudo acceder a la cámara. Verifique permisos HTTPS.";
-                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                    errorMsg = "Permiso de cámara denegado. Habilite el acceso en la configuración.";
-                } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-                    errorMsg = "No se encontró una cámara trasera disponible.";
-                }
-                
-                statusText.innerHTML = `<span class="text-red-400 font-semibold">${errorMsg}</span>`;
+                navigator.mediaDevices.getUserMedia(constraints)
+                    .then(stream => {
+                        mediaStream = stream;
+                        video.srcObject = stream;
+                        video.setAttribute('playsinline', true);
+                        video.play();
+                        
+                        video.onloadedmetadata = () => {
+                            loading.classList.add('hidden');
+                            startScanningLoop();
+                        };
+                    })
+                    .catch(err => {
+                        console.error("Error al acceder a la cámara:", err);
+                        loading.innerHTML = `<p class="text-red-400 text-xs">No se pudo acceder a la cámara. Usa la entrada manual abajo.</p>`;
+                    });
+            } else {
+                loading.innerHTML = `<p class="text-red-400 text-xs">Tu navegador no soporta el acceso a la cámara.</p>`;
             }
         }
 
-        async function reiniciarCamaraScanner() {
-            const targetActual = activeCameraTarget;
-            await closeCameraScannerAsync();
-            setTimeout(() => {
-                if (targetActual) {
-                    openCameraScanner(targetActual);
-                }
-            }, 300);
-        }
+        function startScanningLoop() {
+            if (scanInterval) clearInterval(scanInterval);
 
-        function startContinuousDecodingLoop(videoElement) {
+            const video = document.getElementById('cameraVideo');
             const canvas = document.getElementById('hiddenCanvas');
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            
-            let multiFormatReader;
-            try {
-                multiFormatReader = new ZXing.MultiFormatReader();
-                const hints = new Map();
-                const formats = [
-                    ZXing.BarcodeFormat.EAN_13,
-                    ZXing.BarcodeFormat.EAN_8,
-                    ZXing.BarcodeFormat.UPC_A,
-                    ZXing.BarcodeFormat.UPC_E,
-                    ZXing.BarcodeFormat.CODE_128,
-                    ZXing.BarcodeFormat.CODE_39,
-                    ZXing.BarcodeFormat.CODE_93,
-                    ZXing.BarcodeFormat.ITF,
-                    ZXing.BarcodeFormat.QR_CODE,
-                    ZXing.BarcodeFormat.DATA_MATRIX
-                ];
-                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-                multiFormatReader.setHints(hints);
-            } catch (e) {
-                multiFormatReader = null;
-            }
+            const ctx = canvas.getContext('2d', { alpha: false });
 
-            // Bucle optimizado que evalúa fotogramas constantemente y libera el estado tras cada lectura
+            // Intervalo ultrarrápido (80ms)
             scanInterval = setInterval(() => {
-                if (isProcessingScan) return; // Espera a que termine de procesar el diálogo actual sin romper el intervalo de video
-
-                if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-                    if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) return;
-
-                    if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
-                        canvas.width = videoElement.videoWidth;
-                        canvas.height = videoElement.videoHeight;
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
                     }
 
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    
                     try {
-                        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-                        
                         const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
                         const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
                         
                         if (multiFormatReader) {
                             const result = multiFormatReader.decode(binaryBitmap);
-                            if (result) {
+                            if (result && result.getText()) {
                                 const codeText = result.getText();
                                 const now = Date.now();
-
-                                // Protección contra duplicados inmediatos (2 segundos para el mismo código exacto)
-                                if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
-                                    multiFormatReader.reset();
-                                    return;
-                                }
-
-                                lastScannedCode = codeText;
-                                lastScannedTime = now;
-                                isProcessingScan = true; // Activa bloqueo temporal para manejar la captura
-
-                                if (navigator.vibrate) navigator.vibrate(100);
-
-                                const target = activeCameraTarget;
                                 
-                                // Si es escaneo normal de cartón, asignamos y liberamos el bloqueo de inmediato para seguir escaneando si se requiere
-                                if (target === 'carton') {
-                                    document.getElementById('inputCarton').value = codeText;
-                                    closeCameraScanner();
-                                    isProcessingScan = false;
-                                } else if (target && target.startsWith('disc_')) {
-                                    const idx = parseInt(target.split('_')[1]);
-                                    if (discrepancyRowsData[idx]) {
-                                        discrepancyRowsData[idx].codigo = codeText;
-                                        renderDiscrepancyRows();
-                                    }
-                                    closeCameraScanner();
-                                    isProcessingScan = false;
-                                } else if (target === 'articulos_burst') {
-                                    // Para artículos en ráfaga, cerramos el visor momentáneamente para pedir la cantidad de cajas, 
-                                    // y dejamos la cámara lista para reabrirse o continuar.
-                                    closeCameraScanner();
-                                    solicitarCantidadCajasParaArticuloConContinuidad(codeText);
+                                if (codeText !== lastScannedCode || (now - lastScannedTime) > 400) {
+                                    lastScannedCode = codeText;
+                                    lastScannedTime = now;
+                                    handleSuccessfulScan(codeText);
                                 }
                             }
                         }
                     } catch (e) {
-                        try {
-                            if (multiFormatReader) multiFormatReader.reset();
-                        } catch(err) {}
+                        // Sigue buscando fotograma a fotograma
                     }
                 }
-            }, 100);
+            }, 80);
         }
 
-        function solicitarCantidadCajasParaArticuloConContinuidad(codigoArticulo) {
-            Swal.fire({
-                title: 'Cantidad de Cajas Físicas',
-                html: `<p class="text-sm text-gray-600 mb-2">Artículo detectado:</p>
-                       <p class="font-mono font-bold text-emerald-700 text-lg mb-3">${codigoArticulo}</p>
-                       <p class="text-xs text-gray-500 mb-1">Escribe la cantidad de cajas físicas</p>`,
-                input: 'number',
-                inputAttributes: {
-                    min: 1,
-                    step: 1,
-                    placeholder: 'Escribe cantidad de cajas...'
-                },
-                inputValue: '1',
-                showCancelButton: true,
-                confirmButtonText: 'Guardar y Continuar Escaneando',
-                cancelButtonText: 'Terminar Ráfaga',
-                allowOutsideClick: false,
-                inputValidator: (value) => {
-                    if (!value || parseInt(value) <= 0) {
-                        return 'Debes ingresar una cantidad válida de cajas mayores a 0';
-                    }
-                }
-            }).then((result) => {
-                if (result.isConfirmed && result.value) {
-                    const cantidadCajas = parseInt(result.value);
-                    listaArticulosDetalle.push({ codigo: codigoArticulo, cajas: cantidadCajas });
-                    updateArticulosView();
-                    
-                    // Reabre automáticamente la cámara en modo ráfaga para permitir el siguiente escaneo consecutivo sin pasos extra
-                    setTimeout(() => {
-                        openCameraScanner('articulos_burst');
-                    }, 200);
-                } else {
-                    // Si cancela o termina, liberamos la bandera
-                    isProcessingScan = false;
-                }
-            });
+        function handleSuccessfulScan(code) {
+            stopCameraStreamOnly();
+            document.getElementById('cameraModal').classList.add('hidden');
+
+            if (activeCameraTarget === 'carton') {
+                document.getElementById('inputCarton').value = code;
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Cartón Escaneado!',
+                    text: code,
+                    timer: 1000,
+                    showConfirmButton: false
+                });
+            } else if (activeCameraTarget === 'articulos_burst') {
+                solicitarCantidadCajasParaArticulo(code);
+            }
         }
 
-        async function closeCameraScannerAsync() {
+        function stopCameraStreamOnly() {
             if (scanInterval) {
                 clearInterval(scanInterval);
                 scanInterval = null;
             }
-
-            const videoElement = document.getElementById('cameraVideo');
-            if (videoElement) {
-                videoElement.pause();
-                videoElement.srcObject = null;
-            }
-
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
             }
-            isProcessingScan = false;
+            const video = document.getElementById('cameraVideo');
+            if (video) video.srcObject = null;
         }
 
         function closeCameraScanner() {
-            closeCameraScannerAsync();
+            stopCameraStreamOnly();
             document.getElementById('cameraModal').classList.add('hidden');
+        }
+
+        function reiniciarCamaraScanner() {
+            stopCameraStreamOnly();
+            const loading = document.getElementById('cameraLoading');
+            loading.classList.remove('hidden');
+            setTimeout(() => { startCameraStream(); }, 400);
         }
 
         function submitManualCameraFallback() {
             const val = document.getElementById('manualCameraFallback').value.trim();
             if (val) {
-                const target = activeCameraTarget;
-                closeCameraScanner();
-                if (target === 'articulos_burst') {
-                    solicitarCantidadCajasParaArticuloConContinuidad(val);
-                } else {
-                    if (target === 'carton') {
-                        document.getElementById('inputCarton').value = val;
-                    } else if (target && target.startsWith('disc_')) {
-                        const idx = parseInt(target.split('_')[1]);
-                        if (discrepancyRowsData[idx]) {
-                            discrepancyRowsData[idx].codigo = val;
-                            renderDiscrepancyRows();
-                        }
-                    }
+                stopCameraStreamOnly();
+                document.getElementById('cameraModal').classList.add('hidden');
+                
+                if (activeCameraTarget === 'carton') {
+                    document.getElementById('inputCarton').value = val;
+                } else if (activeCameraTarget === 'articulos_burst') {
+                    solicitarCantidadCajasParaArticulo(val);
                 }
-                document.getElementById('manualCameraFallback').value = '';
             }
         }
 
-        // Guardar o Actualizar Registro
+        // ==========================================
+        // GUARDAR Y GESTIÓN DE REGISTROS
+        // ==========================================
         function guardarRegistro() {
             const empleado = document.getElementById('selectEmpleado').value;
             const psq = document.getElementById('inputPsq').value.trim();
@@ -675,243 +632,295 @@
             const tipoDiscrepancia = document.getElementById('selectTipoDiscrepancia').value;
 
             if (!empleado) {
-                Swal.fire('Atención', 'Seleccione un número de empleado.', 'warning');
+                Swal.fire('Atención', 'Selecciona o ingresa un empleado', 'warning');
+                return;
+            }
+            if (!psq) {
+                Swal.fire('Atención', 'Ingresa el número de PSQ', 'warning');
                 return;
             }
             if (!carton) {
-                Swal.fire('Atención', 'Ingrese o escanee el código de cartón.', 'warning');
+                Swal.fire('Atención', 'Ingresa o escanea el código de cartón', 'warning');
+                return;
+            }
+            if (listaArticulosDetalle.length === 0) {
+                Swal.fire('Atención', 'Debes agregar al menos un artículo escaneado', 'warning');
                 return;
             }
 
-            const ahora = new Date();
-            const fechaStr = ahora.toLocaleDateString();
-            const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            let discrepanciasFinales = [];
+            if (tipoDiscrepancia !== 'Sin discrepancia') {
+                discrepanciasFinales = JSON.parse(JSON.stringify(discrepancyRowsData));
+            }
+
+            const now = new Date();
+            const anio = now.getFullYear();
+            const mes = String(now.getMonth() + 1).padStart(2, '0');
+            const dia = String(now.getDate()).padStart(2, '0');
+            const fechaStr = `${dia}/${mes}/${anio}`;
+            
+            const horas = String(now.getHours()).padStart(2, '0');
+            const minutos = String(now.getMinutes()).padStart(2, '0');
+            const segundos = String(now.getSeconds()).padStart(2, '0');
+            const horaStr = `${horas}:${minutos}:${segundos}`;
 
             if (editingRecordId !== null) {
                 const index = registros.findIndex(r => r.id === editingRecordId);
                 if (index !== -1) {
                     registros[index].empleado = empleado;
-                    registros[index].psq = psq || 'N/A';
-                    registros[index].destino = destino || 'N/A';
+                    registros[index].psq = psq;
+                    registros[index].destino = destino;
                     registros[index].carton = carton;
-                    registros[index].articulosDetalle = JSON.parse(JSON.stringify(listaArticulosDetalle));
+                    registros[index].articulos = JSON.parse(JSON.stringify(listaArticulosDetalle));
                     registros[index].tipoDiscrepancia = tipoDiscrepancia;
-                    registros[index].discrepanciasDetalle = tipoDiscrepancia !== 'Sin discrepancia' ? JSON.parse(JSON.stringify(discrepancyRowsData)) : [];
+                    registros[index].discrepanciasDetalle = discrepanciasFinales;
                 }
-                Swal.fire({ icon: 'success', title: '¡Actualizado!', timer: 1200, showConfirmButton: false });
-                cancelarEdicion();
+                editingRecordId = null;
+                document.getElementById('btnGuardarText').textContent = 'Guardar Registro';
+                document.getElementById('btnCancelarEdicion').classList.add('hidden');
+                document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-clipboard-list text-emerald-600 mr-2"></i> Captura de Auditoría`;
             } else {
-                const nuevoRegistro = {
+                const nuevoReg = {
                     id: Date.now(),
-                    fechaHora: fechaStr + ' ' + horaStr,
                     fecha: fechaStr,
                     hora: horaStr,
                     empleado,
-                    psq: psq || 'N/A',
-                    destino: destino || 'N/A',
+                    psq,
+                    destino,
                     carton,
-                    articulosDetalle: JSON.parse(JSON.stringify(listaArticulosDetalle)),
+                    articulos: JSON.parse(JSON.stringify(listaArticulosDetalle)),
                     tipoDiscrepancia,
-                    discrepanciasDetalle: tipoDiscrepancia !== 'Sin discrepancia' ? JSON.parse(JSON.stringify(discrepancyRowsData)) : []
+                    discrepanciasDetalle: discrepanciasFinales
                 };
-
-                registros.push(nuevoRegistro);
-                Swal.fire({ icon: 'success', title: '¡Guardado!', timer: 1200, showConfirmButton: false });
-                resetForm();
+                registros.unshift(nuevoReg);
             }
 
             saveToStorage();
+            resetFormCleanPartial();
+
+            Swal.fire({
+                icon: 'success',
+                title: '¡Registro Guardado!',
+                timer: 1200,
+                showConfirmButton: false
+            });
         }
 
-        function editarRegistro(id) {
-            const registro = registros.find(r => r.id === id);
-            if (!registro) return;
-
-            editingRecordId = id;
-            document.getElementById('selectEmpleado').value = registro.empleado;
-            document.getElementById('inputPsq').value = registro.psq !== 'N/A' ? registro.psq : '';
-            document.getElementById('inputDestino').value = registro.destino !== 'N/A' ? registro.destino : '';
-            document.getElementById('inputCarton').value = registro.carton;
-            
-            if (registro.articulosDetalle && Array.isArray(registro.articulosDetalle)) {
-                listaArticulosDetalle = JSON.parse(JSON.stringify(registro.articulosDetalle));
-            } else if (registro.articulos && Array.isArray(registro.articulos)) {
-                listaArticulosDetalle = registro.articulos.map(c => ({ codigo: (typeof c === 'object' && c !== null ? (c.codigo || '') : String(c)), cajas: (typeof c === 'object' && c !== null ? (c.cajas || 1) : 1) }));
-            } else {
-                listaArticulosDetalle = [];
-            }
-            updateArticulosView();
-
-            document.getElementById('selectTipoDiscrepancia').value = registro.tipoDiscrepancia || 'Sin discrepancia';
-            toggleDiscrepanciaPanel();
-            
-            if (registro.discrepanciasDetalle && Array.isArray(registro.discrepanciasDetalle)) {
-                discrepancyRowsData = JSON.parse(JSON.stringify(registro.discrepanciasDetalle));
-                renderDiscrepancyRows();
-            }
-
-            document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-600 mr-2"></i> Editando Auditoría (#${id})`;
-            document.getElementById('btnGuardarText').textContent = "Actualizar Registro";
-            document.getElementById('btnGuardarRegistro').classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
-            document.getElementById('btnGuardarRegistro').classList.add('bg-amber-600', 'hover:bg-amber-700');
-            document.getElementById('btnCancelarEdicion').classList.remove('hidden');
-            document.getElementById('btnCancelarEdicion').classList.add('flex');
-
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function cancelarEdicion() {
-            editingRecordId = null;
-            document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-clipboard-list text-emerald-600 mr-2"></i> Captura de Auditoría`;
-            document.getElementById('btnGuardarText').textContent = "Guardar Registro";
-            document.getElementById('btnGuardarRegistro').classList.remove('bg-amber-600', 'hover:bg-amber-700');
-            document.getElementById('btnGuardarRegistro').classList.add('bg-emerald-600', 'hover:bg-emerald-700');
-            document.getElementById('btnCancelarEdicion').classList.remove('flex');
-            document.getElementById('btnCancelarEdicion').classList.add('hidden');
-            resetForm();
-        }
-
-        function resetForm() {
-            document.getElementById('inputPsq').value = '';
-            document.getElementById('inputDestino').value = '';
+        function resetFormCleanPartial() {
             document.getElementById('inputCarton').value = '';
             listaArticulosDetalle = [];
-            discrepancyRowsData = [];
-            updateArticulosView();
+            renderListaArticulos();
             document.getElementById('selectTipoDiscrepancia').value = 'Sin discrepancia';
             toggleDiscrepanciaPanel();
         }
 
-        function deleteRecord(id) {
-            Swal.fire({
-                title: '¿Eliminar registro?',
-                text: "Esta acción no se puede deshacer.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Sí, eliminar',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    registros = registros.filter(r => r.id !== id);
-                    saveToStorage();
-                    Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1000, showConfirmButton: false });
-                }
-            });
+        function resetForm() {
+            document.getElementById('selectEmpleado').value = '';
+            document.getElementById('inputPsq').value = '';
+            document.getElementById('inputDestino').value = '';
+            document.getElementById('inputCarton').value = '';
+            listaArticulosDetalle = [];
+            renderListaArticulos();
+            document.getElementById('selectTipoDiscrepancia').value = 'Sin discrepancia';
+            toggleDiscrepanciaPanel();
+
+            if (editingRecordId !== null) {
+                editingRecordId = null;
+                document.getElementById('btnGuardarText').textContent = 'Guardar Registro';
+                document.getElementById('btnCancelarEdicion').classList.add('hidden');
+                document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-clipboard-list text-emerald-600 mr-2"></i> Captura de Auditoría`;
+            }
         }
 
-        function vaciarTodosLosRegistrosPrompt() {
-            if (registros.length === 0) {
-                Swal.fire('Atención', 'No hay registros guardados actualmente.', 'info');
-                return;
-            }
-
-            Swal.fire({
-                title: '¿Vaciar todos los registros?',
-                text: "Se eliminarán permanentemente todos los registros guardados en la tabla y en el almacenamiento local.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Sí, vaciar todo',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    registros = [];
-                    saveToStorage();
-                    cancelarEdicion();
-                    Swal.fire({ icon: 'success', title: '¡Registros vaciados!', text: 'La aplicación está lista para nuevas auditorías.', timer: 1500, showConfirmButton: false });
-                }
-            });
+        function cancelarEdicion() {
+            resetForm();
         }
 
         function renderTable() {
             const tbody = document.getElementById('tableBodyRecords');
-            document.getElementById('badgeCount').textContent = `${registros.length} registros`;
+            const badge = document.getElementById('badgeCount');
+            badge.textContent = `${registros.length} registros`;
 
             if (registros.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-gray-400">No hay registros guardados todavía</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = '';
-            registros.forEach((r, idx) => {
-                let artsDetalleArr = [];
-                if (r.articulosDetalle && Array.isArray(r.articulosDetalle)) {
-                    artsDetalleArr = r.articulosDetalle.map(item => {
-                        if (typeof item === 'object' && item !== null) {
-                            return { codigo: item.codigo || '', cajas: item.cajas || 1 };
+            let html = '';
+            registros.forEach((reg, index) => {
+                let artsText = reg.articulos.map(a => `${a.codigo} (${a.cajas}c)`).join(', ');
+                let discText = reg.tipoDiscrepancia;
+                if (reg.tipoDiscrepancia !== 'Sin discrepancia' && reg.discrepanciasDetalle && reg.discrepanciasDetalle.length > 0) {
+                    let dArr = reg.discrepanciasDetalle.map(d => `${d.tipoError}: ${d.cajasError}c / ${d.piezasError}p`);
+                    discText += `<br><span class="text-[10px] text-red-600 font-mono">${dArr.join(' | ')}</span>`;
+                }
+
+                html += `
+                    <tr class="hover:bg-gray-50 border-b">
+                        <td class="p-2 font-bold">${registros.length - index}</td>
+                        <td class="p-2 text-gray-500 whitespace-nowrap">${reg.fecha} ${reg.hora}</td>
+                        <td class="p-2 font-medium">${reg.empleado}</td>
+                        <td class="p-2 font-mono font-bold text-emerald-700">${reg.psq}</td>
+                        <td class="p-2">${reg.destino || '-'}</td>
+                        <td class="p-2 font-mono">${reg.carton}</td>
+                        <td class="p-2 font-mono max-w-xs truncate" title="${artsText}">${artsText}</td>
+                        <td class="p-2">${discText}</td>
+                        <td class="p-2 text-center whitespace-nowrap space-x-1">
+                            <button onclick="editarRegistro(${reg.id})" class="bg-amber-500 hover:bg-amber-600 text-white p-1.5 rounded text-xs shadow" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="eliminarRegistro(${reg.id})" class="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded text-xs shadow" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function editarRegistro(id) {
+            const reg = registros.find(r => r.id === id);
+            if (!reg) return;
+
+            editingRecordId = reg.id;
+            document.getElementById('btnGuardarText').textContent = 'Actualizar Registro';
+            document.getElementById('btnCancelarEdicion').classList.remove('hidden');
+            document.getElementById('formTitleText').innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-600 mr-2"></i> Editando Registro #${reg.psq}`;
+
+            const selectEmp = document.getElementById('selectEmpleado');
+            let foundOpt = false;
+            for (let opt of selectEmp.options) {
+                if (opt.value === reg.empleado) { foundOpt = true; break; }
+            }
+            if (!foundOpt && reg.empleado) {
+                const opt = document.createElement('option');
+                opt.value = reg.empleado;
+                opt.textContent = reg.empleado;
+                selectEmp.appendChild(opt);
+            }
+            selectEmp.value = reg.empleado;
+
+            document.getElementById('inputPsq').value = reg.psq;
+            document.getElementById('inputDestino').value = reg.destino || '';
+            document.getElementById('inputCarton').value = reg.carton;
+
+            listaArticulosDetalle = JSON.parse(JSON.stringify(reg.articulos || []));
+            renderListaArticulos();
+
+            document.getElementById('selectTipoDiscrepancia').value = reg.tipoDiscrepancia || 'Sin discrepancia';
+            toggleDiscrepanciaPanel();
+
+            if (reg.tipoDiscrepancia !== 'Sin discrepancia' && reg.discrepanciasDetalle) {
+                discrepancyRowsData = JSON.parse(JSON.stringify(reg.discrepanciasDetalle));
+                renderDiscrepancyRows();
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function eliminarRegistro(id) {
+            Swal.fire({
+                title: '¿Eliminar registro?',
+                text: "Esta acción no se puede deshacer",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    registros = registros.filter(r => r.id !== id);
+                    saveToStorage();
+                }
+            });
+        }
+
+        function vaciarTodosLosRegistrosPrompt() {
+            Swal.fire({
+                title: '¿Vaciar todos los registros?',
+                text: "Se borrarán todos los registros guardados en este dispositivo.",
+                icon: 'error',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, vaciar todo',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    registros = [];
+                    saveToStorage();
+                }
+            });
+        }
+
+        // ==========================================
+        // GENERACIÓN DE CSV (EXCEL) Y PDF
+        // ==========================================
+        function exportToExcelModal() {
+            if (registros.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar', 'warning');
+                return;
+            }
+
+            // Cabeceras exactas solicitadas
+            let csvContent = "Destino;PSQ;Carton;CodigoArticulo;CajasArticulo;TotalPiezas;TipoDiscrepancia;CajasDiscrepancia;PiezasDiscrepancia;Fecha;Hora;Auditor\n";
+
+            registros.forEach((reg) => {
+                if (reg.articulos && reg.articulos.length > 0) {
+                    reg.articulos.forEach(art => {
+                        let codigoArt = `='${art.codigo}'`;
+                        let cajasArt = art.cajas;
+                        let totalPiezas = art.cajas * 1;
+
+                        let tipoDisc = reg.tipoDiscrepancia;
+                        let cajasDisc = 0;
+                        let piezasDisc = 0;
+
+                        if (reg.tipoDiscrepancia !== 'Sin discrepancia' && reg.discrepanciasDetalle && reg.discrepanciasDetalle.length > 0) {
+                            let d = reg.discrepanciasDetalle[0];
+                            if (d) {
+                                tipoDisc = d.tipoError;
+                                cajasDisc = d.cajasError || 0;
+                                piezasDisc = d.piezasError || 0;
+                            }
                         }
-                        return { codigo: String(item), cajas: 1 };
+
+                        let auditorStr = `='${reg.empleado}'`;
+
+                        let row = [
+                            `"${reg.destino || ''}"`,
+                            `"${reg.psq}"`,
+                            `"${reg.carton}"`,
+                            codigoArt,
+                            cajasArt,
+                            totalPiezas,
+                            `"${tipoDisc}"`,
+                            cajasDisc,
+                            piezasDisc,
+                            `"${reg.fecha}"`,
+                            `"${reg.hora}"`,
+                            auditorStr
+                        ];
+                        csvContent += row.join(";") + "\n";
                     });
                 }
-                
-                let artsText = `${artsDetalleArr.length} arts`;
-                let artsTooltip = artsDetalleArr.map(item => `${item.codigo} (Cajas: ${item.cajas})`).join(', ');
-
-                let discText = r.tipoDiscrepancia || 'Sin discrepancia';
-                if (r.discrepanciasDetalle && r.discrepanciasDetalle.length > 0) {
-                    discText += ': ' + r.discrepanciasDetalle.map(d => `[${d.tipo}: ${d.codigo || 'S/C'}, Cajas: ${d.cajas || 0}, Pzs: ${d.piezas || 0}]`).join(' | ');
-                }
-
-                const cartonVal = (typeof r.carton === 'object' && r.carton !== null) ? (r.carton.codigo || JSON.stringify(r.carton)) : (r.carton || 'N/A');
-
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-gray-50 border-b';
-                tr.innerHTML = `
-                    <td class="p-2 font-medium">${idx + 1}</td>
-                    <td class="p-2 text-gray-500 whitespace-nowrap">${r.fechaHora || 'N/A'}</td>
-                    <td class="p-2">${r.empleado}</td>
-                    <td class="p-2 font-semibold text-slate-700">${r.psq || 'N/A'}</td>
-                    <td class="p-2">${r.destino}</td>
-                    <td class="p-2 font-mono text-emerald-700 font-bold">${cartonVal}</td>
-                    <td class="p-2" title="${artsTooltip}"><span class="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-medium">${artsText}</span></td>
-                    <td class="p-2 text-gray-600 max-w-xs truncate" title="${discText}">${discText}</td>
-                    <td class="p-2 text-center whitespace-nowrap space-x-1">
-                        <button onclick="editarRegistro(${r.id})" class="text-amber-600 hover:text-amber-800 p-1" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
-                        <button onclick="deleteRecord(${r.id})" class="text-red-500 hover:text-red-700 p-1" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        // Exportación CSV intacta
-        function escapeCsvCell(val) {
-            if (val === null || val === undefined) return '""';
-            let str = String(val).trim();
-            if (str === "[object Object]") str = "";
-            const escaped = str.replace(/"/g, '""');
-            return `"${escaped}"`;
-        }
-
-        function exportToExcelModal() {
-            const modal = document.getElementById('exportModal');
-            const textarea = document.getElementById('exportTextarea');
-            let csvRows = [];
-            const headers = ["Destino", "PSQ", "Cartón", "Número de empleado", "Hora", "Fecha", "SKU", "Cajas auditadas", "Cajas con discrepancia", "Sobrante", "Faltante", "Merma"];
-            csvRows.push(headers.map(escapeCsvCell).join(","));
-
-            registros.forEach((r) => {
-                let artsDetalleArr = r.articulosDetalle || [];
-                if (artsDetalleArr.length === 0) artsDetalleArr.push({ codigo: '', cajas: 0 });
-                artsDetalleArr.forEach(art => {
-                    csvRows.push([r.destino, r.psq, r.carton, r.empleado, r.hora, r.fecha, art.codigo, art.cajas, "", "", "", ""].map(escapeCsvCell).join(","));
-                });
             });
 
-            textarea.value = csvRows.join("\r\n");
-            modal.classList.remove('hidden');
+            document.getElementById('exportTextarea').value = csvContent;
+            document.getElementById('exportModal').classList.remove('hidden');
         }
 
-        function closeExportModal() { document.getElementById('exportModal').classList.add('hidden'); }
+        function closeExportModal() {
+            document.getElementById('exportModal').classList.add('hidden');
+        }
+
         function copyExportText() {
             const textarea = document.getElementById('exportTextarea');
             textarea.select();
             document.execCommand('copy');
-            Swal.fire({ icon: 'success', title: '¡Copiado!', timer: 1200, showConfirmButton: false });
+            Swal.fire({
+                icon: 'success',
+                title: '¡Copiado al portapapeles!',
+                text: 'Pegado correctamente.',
+                timer: 1500,
+                showConfirmButton: false
+            });
         }
+
         function downloadCSVFile() {
             const text = document.getElementById('exportTextarea').value;
             const blob = new Blob(["\uFEFF" + text], { type: 'text/csv;charset=utf-8;' });
@@ -921,9 +930,80 @@
             a.download = `Auditoria_Cartones_${new Date().toISOString().slice(0,10)}.csv`;
             document.body.appendChild(a);
             a.click();
-            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+            document.body.removeChild(a);
         }
-        function copyTableToClipboard() { exportToExcelModal(); }
+
+        // Descarga de Respaldo en Formato PDF
+        function downloadPDFFile() {
+            if (registros.length === 0) {
+                Swal.fire('Atención', 'No hay registros para exportar en PDF', 'warning');
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('landscape', 'mm', 'a4'); // Horizontal para que quepan todas las columnas cómodamente
+
+            doc.setFontSize(14);
+            doc.setTextColor(16, 122, 80);
+            doc.text("Reporte de Auditoría de Cartones", 14, 15);
+
+            doc.setFontSize(9);
+            doc.setTextColor(100, 100, 100);
+            doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, 14, 21);
+
+            let tableData = [];
+            registros.forEach((reg) => {
+                if (reg.articulos && reg.articulos.length > 0) {
+                    reg.articulos.forEach(art => {
+                        let tipoDisc = reg.tipoDiscrepancia;
+                        let cajasDisc = 0;
+                        let piezasDisc = 0;
+
+                        if (reg.tipoDiscrepancia !== 'Sin discrepancia' && reg.discrepanciasDetalle && reg.discrepanciasDetalle.length > 0) {
+                            let d = reg.discrepanciasDetalle[0];
+                            if (d) {
+                                tipoDisc = d.tipoError;
+                                cajasDisc = d.cajasError || 0;
+                                piezasDisc = d.piezasError || 0;
+                            }
+                        }
+
+                        tableData.push([
+                            reg.destino || '-',
+                            reg.psq,
+                            reg.carton,
+                            art.codigo,
+                            art.cajas,
+                            art.cajas * 1,
+                            tipoDisc,
+                            cajasDisc,
+                            piezasDisc,
+                            reg.fecha,
+                            reg.hora,
+                            reg.empleado
+                        ]);
+                    });
+                }
+            });
+
+            doc.autoTable({
+                head: [['Destino', 'PSQ', 'Cartón', 'Código Artículo', 'Cajas', 'Total Pzas', 'Tipo Disc.', 'Cajas Disc.', 'Pzas Disc.', 'Fecha', 'Hora', 'Auditor']],
+                body: tableData,
+                startY: 25,
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 2 },
+                headStyles: { fillColor: [16, 122, 80] }
+            });
+
+            doc.save(`Auditoria_Cartones_${new Date().toISOString().slice(0,10)}.pdf`);
+            
+            Swal.fire({
+                icon: 'success',
+                title: '¡PDF Generado con éxito!',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        }
     </script>
 </body>
 </html>
