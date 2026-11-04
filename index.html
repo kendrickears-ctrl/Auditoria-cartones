@@ -262,6 +262,7 @@
             }
             renderTable();
 
+            // Inicialización segura de ZXing MultiFormatReader
             try {
                 multiFormatReader = new ZXing.MultiFormatReader();
                 const hints = new Map();
@@ -856,7 +857,6 @@
                 return;
             }
 
-            // Cabeceras exactas solicitadas
             let csvContent = "Destino;PSQ;Carton;CodigoArticulo;CajasArticulo;TotalPiezas;TipoDiscrepancia;CajasDiscrepancia;PiezasDiscrepancia;Fecha;Hora;Auditor\n";
 
             registros.forEach((reg) => {
@@ -933,7 +933,6 @@
             document.body.removeChild(a);
         }
 
-        // Descarga de Respaldo en Formato PDF
         function downloadPDFFile() {
             if (registros.length === 0) {
                 Swal.fire('Atención', 'No hay registros para exportar en PDF', 'warning');
@@ -941,7 +940,7 @@
             }
 
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('landscape', 'mm', 'a4'); // Horizontal para que quepan todas las columnas cómodamente
+            const doc = new jsPDF('landscape', 'mm', 'a4');
 
             doc.setFontSize(14);
             doc.setTextColor(16, 122, 80);
