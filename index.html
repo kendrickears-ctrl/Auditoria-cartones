@@ -198,7 +198,7 @@
 
         <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center border-2 border-emerald-500">
             <video id="cameraVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
-            <!-- Canvas auxiliar nativo para procesamiento de fotogramas altamente fluido -->
+            <!-- Canvas auxiliar nativo para procesamiento continuo de fotogramas -->
             <canvas id="hiddenCanvas" class="hidden"></canvas>
             <div id="cameraLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 text-white p-4 text-center">
                 <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400 mb-2"></i>
@@ -245,6 +245,7 @@
         let scanInterval = null;
         let lastScannedCode = "";
         let lastScannedTime = 0;
+        let isProcessingScan = false; // Bandera de control temporal para evitar doble lectura instantánea sin bloquear el ciclo
         let editingRecordId = null;
 
         window.onload = function() {
@@ -422,9 +423,10 @@
             }
         }
 
-        // --- MOTOR DE ESCANEO ULTRA-ESTABLE Y RESTAURADO ---
+        // --- MOTOR DE ESCANEO CON BUCLE CONTINUO Y LIBERACIÓN DE BLOQUEO ---
         async function openCameraScanner(target) {
             activeCameraTarget = target;
+            isProcessingScan = false; // Reiniciar bandera de bloqueo al abrir
             const modal = document.getElementById('cameraModal');
             const videoElement = document.getElementById('cameraVideo');
             const loading = document.getElementById('cameraLoading');
@@ -457,7 +459,7 @@
                 loading.classList.add('hidden');
                 statusText.textContent = "Apunta la cámara al código de barras...";
 
-                startStableDecodingLoop(videoElement);
+                startContinuousDecodingLoop(videoElement);
 
             } catch (err) {
                 loading.classList.add('hidden');
@@ -484,19 +486,37 @@
             }, 300);
         }
 
-        function startStableDecodingLoop(videoElement) {
+        function startContinuousDecodingLoop(videoElement) {
             const canvas = document.getElementById('hiddenCanvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             
-            let codeReader;
+            let multiFormatReader;
             try {
-                codeReader = new ZXing.BrowserMultiFormatReader();
+                multiFormatReader = new ZXing.MultiFormatReader();
+                const hints = new Map();
+                const formats = [
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.CODE_93,
+                    ZXing.BarcodeFormat.ITF,
+                    ZXing.BarcodeFormat.QR_CODE,
+                    ZXing.BarcodeFormat.DATA_MATRIX
+                ];
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                multiFormatReader.setHints(hints);
             } catch (e) {
-                codeReader = null;
+                multiFormatReader = null;
             }
 
-            // Bucle de lectura altamente robusto basado en captura por fotogramas limpios
+            // Bucle optimizado que evalúa fotogramas constantemente y libera el estado tras cada lectura
             scanInterval = setInterval(() => {
+                if (isProcessingScan) return; // Espera a que termine de procesar el diálogo actual sin romper el intervalo de video
+
                 if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
                     if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) return;
 
@@ -508,51 +528,96 @@
                     try {
                         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
                         
-                        // Si BrowserMultiFormatReader está disponible, decodificamos el canvas de forma nativa
-                        if (codeReader && typeof codeReader.decodeFromCanvas === 'function') {
-                            codeReader.decodeFromCanvas(canvas).then(result => {
-                                if (result) {
-                                    handleSuccessfulScan(result.getText());
-                                }
-                            }).catch(err => {
-                                // Ignoramos errores de fotogramas sin códigos y seguimos buscando
-                            });
-                        } else {
-                            // Fallback con MultiFormatReader directo
-                            const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-                            const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-                            const reader = new ZXing.MultiFormatReader();
-                            const result = reader.decode(binaryBitmap);
+                        const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+                        const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+                        
+                        if (multiFormatReader) {
+                            const result = multiFormatReader.decode(binaryBitmap);
                             if (result) {
-                                handleSuccessfulScan(result.getText());
+                                const codeText = result.getText();
+                                const now = Date.now();
+
+                                // Protección contra duplicados inmediatos (2 segundos para el mismo código exacto)
+                                if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
+                                    multiFormatReader.reset();
+                                    return;
+                                }
+
+                                lastScannedCode = codeText;
+                                lastScannedTime = now;
+                                isProcessingScan = true; // Activa bloqueo temporal para manejar la captura
+
+                                if (navigator.vibrate) navigator.vibrate(100);
+
+                                const target = activeCameraTarget;
+                                
+                                // Si es escaneo normal de cartón, asignamos y liberamos el bloqueo de inmediato para seguir escaneando si se requiere
+                                if (target === 'carton') {
+                                    document.getElementById('inputCarton').value = codeText;
+                                    closeCameraScanner();
+                                    isProcessingScan = false;
+                                } else if (target && target.startsWith('disc_')) {
+                                    const idx = parseInt(target.split('_')[1]);
+                                    if (discrepancyRowsData[idx]) {
+                                        discrepancyRowsData[idx].codigo = codeText;
+                                        renderDiscrepancyRows();
+                                    }
+                                    closeCameraScanner();
+                                    isProcessingScan = false;
+                                } else if (target === 'articulos_burst') {
+                                    // Para artículos en ráfaga, cerramos el visor momentáneamente para pedir la cantidad de cajas, 
+                                    // y dejamos la cámara lista para reabrirse o continuar.
+                                    closeCameraScanner();
+                                    solicitarCantidadCajasParaArticuloConContinuidad(codeText);
+                                }
                             }
                         }
                     } catch (e) {
-                        // Continuar escaneando sin interrumpir
+                        try {
+                            if (multiFormatReader) multiFormatReader.reset();
+                        } catch(err) {}
                     }
                 }
-            }, 150);
+            }, 100);
         }
 
-        function handleSuccessfulScan(codeText) {
-            const now = Date.now();
-            if (codeText === lastScannedCode && (now - lastScannedTime < 2000)) {
-                return; // Evita lecturas duplicadas en ráfaga rápida
-            }
-
-            lastScannedCode = codeText;
-            lastScannedTime = now;
-
-            if (navigator.vibrate) navigator.vibrate(100);
-
-            const target = activeCameraTarget;
-            closeCameraScanner();
-
-            if (target === 'articulos_burst') {
-                solicitarCantidadCajasParaArticulo(codeText);
-            } else {
-                handleScannedValue(codeText, target);
-            }
+        function solicitarCantidadCajasParaArticuloConContinuidad(codigoArticulo) {
+            Swal.fire({
+                title: 'Cantidad de Cajas Físicas',
+                html: `<p class="text-sm text-gray-600 mb-2">Artículo detectado:</p>
+                       <p class="font-mono font-bold text-emerald-700 text-lg mb-3">${codigoArticulo}</p>
+                       <p class="text-xs text-gray-500 mb-1">Escribe la cantidad de cajas físicas</p>`,
+                input: 'number',
+                inputAttributes: {
+                    min: 1,
+                    step: 1,
+                    placeholder: 'Escribe cantidad de cajas...'
+                },
+                inputValue: '1',
+                showCancelButton: true,
+                confirmButtonText: 'Guardar y Continuar Escaneando',
+                cancelButtonText: 'Terminar Ráfaga',
+                allowOutsideClick: false,
+                inputValidator: (value) => {
+                    if (!value || parseInt(value) <= 0) {
+                        return 'Debes ingresar una cantidad válida de cajas mayores a 0';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    const cantidadCajas = parseInt(result.value);
+                    listaArticulosDetalle.push({ codigo: codigoArticulo, cajas: cantidadCajas });
+                    updateArticulosView();
+                    
+                    // Reabre automáticamente la cámara en modo ráfaga para permitir el siguiente escaneo consecutivo sin pasos extra
+                    setTimeout(() => {
+                        openCameraScanner('articulos_burst');
+                    }, 200);
+                } else {
+                    // Si cancela o termina, liberamos la bandera
+                    isProcessingScan = false;
+                }
+            });
         }
 
         async function closeCameraScannerAsync() {
@@ -571,6 +636,7 @@
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
             }
+            isProcessingScan = false;
         }
 
         function closeCameraScanner() {
@@ -584,23 +650,19 @@
                 const target = activeCameraTarget;
                 closeCameraScanner();
                 if (target === 'articulos_burst') {
-                    solicitarCantidadCajasParaArticulo(val);
+                    solicitarCantidadCajasParaArticuloConContinuidad(val);
                 } else {
-                    handleScannedValue(val, target);
+                    if (target === 'carton') {
+                        document.getElementById('inputCarton').value = val;
+                    } else if (target && target.startsWith('disc_')) {
+                        const idx = parseInt(target.split('_')[1]);
+                        if (discrepancyRowsData[idx]) {
+                            discrepancyRowsData[idx].codigo = val;
+                            renderDiscrepancyRows();
+                        }
+                    }
                 }
                 document.getElementById('manualCameraFallback').value = '';
-            }
-        }
-
-        function handleScannedValue(code, target) {
-            if (target === 'carton') {
-                document.getElementById('inputCarton').value = code;
-            } else if (target && target.startsWith('disc_')) {
-                const idx = parseInt(target.split('_')[1]);
-                if (discrepancyRowsData[idx]) {
-                    discrepancyRowsData[idx].codigo = code;
-                    renderDiscrepancyRows();
-                }
             }
         }
 
@@ -783,13 +845,6 @@
                         }
                         return { codigo: String(item), cajas: 1 };
                     });
-                } else if (r.articulos && Array.isArray(r.articulos)) {
-                    artsDetalleArr = r.articulos.map(c => {
-                        if (typeof c === 'object' && c !== null) {
-                            return { codigo: c.codigo || '', cajas: c.cajas || 1 };
-                        }
-                        return { codigo: String(c), cajas: 1 };
-                    });
                 }
                 
                 let artsText = `${artsDetalleArr.length} arts`;
@@ -822,7 +877,7 @@
             });
         }
 
-        // Exportación mantenida exactamente como estaba
+        // Exportación CSV intacta
         function escapeCsvCell(val) {
             if (val === null || val === undefined) return '""';
             let str = String(val).trim();
